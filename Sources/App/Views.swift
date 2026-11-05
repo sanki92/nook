@@ -48,6 +48,11 @@ final class TileView: NSView {
         root.addSublayer(canvas)
 
         label.textColor = .white
+        let nameShadow = NSShadow()
+        nameShadow.shadowColor = NSColor.black.withAlphaComponent(0.35)
+        nameShadow.shadowOffset = NSSize(width: 0, height: -1)
+        nameShadow.shadowBlurRadius = 3
+        label.shadow = nameShadow
         label.lineBreakMode = .byTruncatingTail
         label.maximumNumberOfLines = 1
         label.cell?.truncatesLastVisibleLine = true
@@ -114,17 +119,19 @@ final class TileView: NSView {
         }
     }
 
-    func setFaded(_ faded: Bool) {
+    func setFaded(_ faded: Bool, animated: Bool) {
         let target: Float = faded ? (content == .agent(.gate) ? 0.66 : 0.10) : 0.78
         guard tint.opacity != target else { return }
-        let fade = CABasicAnimation(keyPath: "opacity")
-        fade.fromValue = tint.presentation()?.opacity ?? tint.opacity
-        fade.toValue = target
-        fade.duration = 0.3
         CATransaction.begin()
         CATransaction.setDisableActions(true)
+        if animated {
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = tint.presentation()?.opacity ?? tint.opacity
+            fade.toValue = target
+            fade.duration = 0.3
+            tint.add(fade, forKey: "fade")
+        }
         tint.opacity = target
-        tint.add(fade, forKey: "fade")
         CATransaction.commit()
     }
 
@@ -268,7 +275,7 @@ final class BoardView: NSView {
                 isNew = true
             }
             tile.configure(content: content, name: name, pid: pid, size: target.size, cornerRadius: cornerRadius, campfirePixel: campfirePixel, extra: extra)
-            tile.setFaded(faded)
+            tile.setFaded(faded, animated: !isNew)
             work.append((tile, target, isNew))
         }
 
@@ -298,7 +305,7 @@ final class BoardView: NSView {
 
     func setFaded(_ faded: Bool) {
         self.faded = faded
-        for tile in tiles.values { tile.setFaded(faded) }
+        for tile in tiles.values { tile.setFaded(faded, animated: true) }
     }
 
     func tick() {
