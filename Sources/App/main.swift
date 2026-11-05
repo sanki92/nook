@@ -51,6 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var frameTimer: Timer?
     private var size = WidgetSize.extraLarge
     private var realWidgets: [CGRect] = []
+    private var currentSlot: SavedSlot?
     private var dragging = false
     private var screensChangedWhileDragging = false
 
@@ -80,9 +81,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         realWidgets = realWidgetFrames()
-        let launch = placement(for: size)
+        let launch = placement(for: size, from: savedSlot)
         panel.setFrame(launch.frame, display: false)
-        if launch.free { savedSlot = launch.slot }
+        currentSlot = launch.slot
+        if launch.free && launch.remember { savedSlot = launch.slot }
         panel.orderFrontRegardless()
 
         fade(for: NSWorkspace.shared.frontmostApplication)
@@ -157,11 +159,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func placement(for size: WidgetSize) -> (slot: SavedSlot, frame: CGRect, free: Bool) {
+    private func placement(for size: WidgetSize, from start: SavedSlot?) -> (slot: SavedSlot, frame: CGRect, free: Bool, remember: Bool) {
         let displays = currentDisplays()
-        let slot = resolvePlacement(saved: savedSlot, size: size, displays: displays, taken: realWidgets)
+        let slot = resolvePlacement(saved: start, size: size, displays: displays, taken: realWidgets)
         let grid = displays.first { $0.id == slot.display }?.grid ?? SlotGrid(visibleFrame: .zero)
-        return (slot, grid.frame(slot.cell, size), grid.isFree(slot.cell, size, taken: realWidgets))
+        return (slot, grid.frame(slot.cell, size), grid.isFree(slot.cell, size, taken: realWidgets), shouldRemember(slot, saved: start, displays: displays))
     }
 
     private func move(to frame: CGRect) {
@@ -178,9 +180,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         realWidgets = realWidgetFrames()
-        let next = placement(for: size)
-        guard next.free else { return }
-        savedSlot = next.slot
+        let next = placement(for: size, from: savedSlot)
+        let lost = !NSScreen.screens.contains { $0.frame.intersects(panel.frame) }
+        guard next.free || lost else { return }
+        currentSlot = next.slot
+        if next.free && next.remember { savedSlot = next.slot }
         move(to: next.frame)
     }
 
@@ -213,7 +217,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         while let next = panel.nextEvent(matching: [.leftMouseUp, .leftMouseDragged]), next.type == .leftMouseDragged { follow() }
         outline.hide()
         dragging = false
-        if let target { savedSlot = target.slot }
+        if let target {
+            savedSlot = target.slot
+            currentSlot = target.slot
+        }
         move(to: target?.frame ?? home)
         if screensChangedWhileDragging {
             screensChangedWhileDragging = false
@@ -246,11 +253,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func chooseSize(_ item: NSMenuItem) {
         guard let next = (item.representedObject as? String).flatMap(WidgetSize.init(rawValue:)), next != size else { return }
         realWidgets = realWidgetFrames()
-        let target = placement(for: next)
+        let target = placement(for: next, from: currentSlot)
         guard target.free else { return }
         size = next
         defaults.set(next.rawValue, forKey: "size")
         savedSlot = target.slot
+        currentSlot = target.slot
         host.resize(to: next)
         move(to: target.frame)
     }

@@ -151,6 +151,12 @@ check(resolvePlacement(saved: nil, size: .extraLarge, displays: [tiny], taken: [
 check(resolvePlacement(saved: SavedSlot(display: 2, cell: Cell(column: 3, row: 2)), size: .extraLarge, displays: [tiny], taken: []) == SavedSlot(display: 1, cell: Cell(column: 0, row: 0)), "a missing display with a full main display still lands at 0,0 on the main display")
 let externalFull = [CGRect(x: 1470, y: 0, width: 1920, height: 1050)]
 check(resolvePlacement(saved: SavedSlot(display: 2, cell: Cell(column: 3, row: 2)), size: .large, displays: [main, external], taken: externalFull) == SavedSlot(display: 1, cell: Cell(column: 0, row: 0)), "a full external display sends the widget to the main display")
+let away = SavedSlot(display: 2, cell: Cell(column: 3, row: 2))
+check(!shouldRemember(unplugged, saved: away, displays: [main]), "a move forced by a missing display isn't saved")
+check(resolvePlacement(saved: away, size: .large, displays: [main, external], taken: []) == away, "the widget goes back when its display returns")
+check(shouldRemember(covered, saved: SavedSlot(display: 1, cell: Cell(column: 0, row: 0)), displays: [main]), "a move off a covered slot on a present display is saved")
+check(!shouldRemember(kept, saved: kept, displays: [main, external]), "an unchanged slot isn't saved again")
+check(shouldRemember(SavedSlot(display: 1, cell: Cell(column: 0, row: 1)), saved: nil, displays: [main]), "the first launch saves its slot")
 check(resolvePlacement(saved: nil, size: .extraLarge, displays: [main], taken: [calendar, weather]).cell == Cell(column: 0, row: 1), "the first launch picks the free slot nearest the top-left")
 
 print("Medium")

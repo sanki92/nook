@@ -77,3 +77,8 @@ func resolvePlacement(saved: SavedSlot?, size: WidgetSize, displays: [Display], 
     }
     return SavedSlot(display: main.id, cell: Cell(column: 0, row: 0))
 }
+
+func shouldRemember(_ resolved: SavedSlot, saved: SavedSlot?, displays: [Display]) -> Bool {
+    guard let saved else { return true }
+    return resolved != saved && displays.contains { $0.id == saved.display }
+}
