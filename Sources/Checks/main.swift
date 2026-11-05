@@ -89,6 +89,11 @@ let three = tileRects(count: 3, size: .large)
 check(three[0].width > three[1].width && three[1].minY == three[2].minY, "3 on Large: one wide tile on top, two below")
 check(tileRects(count: 3, size: .extraLarge)[0].height > tileRects(count: 3, size: .extraLarge)[1].height, "3 on Extra Large: one tall tile plus two")
 check(tileRects(count: 2, size: .large)[0].minX == 6, "tiles have a 6pt inset")
+func rowShape(_ rects: [CGRect]) -> [Int] { Dictionary(grouping: rects, by: \.minY).sorted { $0.key < $1.key }.map(\.value.count) }
+let largeShapes: [Int: [Int]] = [4: [2, 2], 5: [2, 3], 6: [3, 3], 7: [2, 2, 3], 8: [2, 3, 3], 9: [3, 3, 3]]
+for (count, shape) in largeShapes.sorted(by: { $0.key < $1.key }) {
+    check(rowShape(tileRects(count: count, size: .large)) == shape, "\(count) on Large sit in rows of \(shape.map(String.init).joined(separator: "-"))")
+}
 check(tileGeometry(size: CGSize(width: 157, height: 200)).compact, "narrower than 158 is compact")
 check(tileGeometry(size: CGSize(width: 200, height: 113)).compact, "shorter than 114 is compact")
 check(!tileGeometry(size: tileRects(count: 4, size: .large)[0].size).compact, "4 on Large keep full scenes")
@@ -143,6 +148,9 @@ let grown = resolvePlacement(saved: SavedSlot(display: 1, cell: Cell(column: 7, 
 check(mainGrid.isFree(grown.cell, .extraLarge, taken: []), "growing past the edge moves to the nearest slot that fits")
 let tiny = Display(id: 1, grid: SlotGrid(visibleFrame: CGRect(x: 0, y: 0, width: 400, height: 300)), isMain: true)
 check(resolvePlacement(saved: nil, size: .extraLarge, displays: [tiny], taken: []) == SavedSlot(display: 1, cell: Cell(column: 0, row: 0)), "with no free slot it falls back to 0,0 on the main display")
+check(resolvePlacement(saved: SavedSlot(display: 2, cell: Cell(column: 3, row: 2)), size: .extraLarge, displays: [tiny], taken: []) == SavedSlot(display: 1, cell: Cell(column: 0, row: 0)), "a missing display with a full main display still lands at 0,0 on the main display")
+let externalFull = [CGRect(x: 1470, y: 0, width: 1920, height: 1050)]
+check(resolvePlacement(saved: SavedSlot(display: 2, cell: Cell(column: 3, row: 2)), size: .large, displays: [main, external], taken: externalFull) == SavedSlot(display: 1, cell: Cell(column: 0, row: 0)), "a full external display sends the widget to the main display")
 check(resolvePlacement(saved: nil, size: .extraLarge, displays: [main], taken: [calendar, weather]).cell == Cell(column: 0, row: 1), "the first launch picks the free slot nearest the top-left")
 
 print("Medium")
