@@ -59,7 +59,10 @@ final class PlacementOutline {
         let moving = shown != nil
         shown = target
         if !moving {
-            panel.setFrame(target, display: true)
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0
+                panel.animator().setFrame(target, display: true)
+            }
             panel.alphaValue = 0
             panel.order(.below, relativeTo: widget.windowNumber)
         }
