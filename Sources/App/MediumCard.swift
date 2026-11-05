@@ -70,7 +70,7 @@ final class MediumCard: NSView {
         CATransaction.commit()
     }
 
-    func update(agents: [Agent], animated: Bool) {
+    func update(agents: [Agent]) {
         guard agents != self.agents else { return }
         self.agents = agents
         guard let index = picker.current(in: agents) else {

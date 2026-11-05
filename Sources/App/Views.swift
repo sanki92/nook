@@ -201,7 +201,7 @@ final class InteractionView: NSView {
     var onClick: ((NSPoint) -> Void)?
     var makeMenu: (() -> NSMenu)?
     var onSwipe: ((Int) -> Void)?
-    var onDrag: ((NSEvent, NSPoint) -> Void)?
+    var onDrag: ((NSPoint) -> Void)?
     private var travel = CGPoint.zero
     private var swiped = false
     private var lastWheelSwipe = -TimeInterval.infinity
@@ -220,7 +220,7 @@ final class InteractionView: NSView {
             }
             let moved = hypot(next.locationInWindow.x - start.x, next.locationInWindow.y - start.y)
             if moved > 3 {
-                onDrag?(event, window.convertPoint(toScreen: start))
+                onDrag?(window.convertPoint(toScreen: start))
                 return
             }
         }
@@ -420,7 +420,7 @@ final class GlassHost: NSView {
     func update(agents: [Agent], animated: Bool) {
         self.agents = agents
         board.update(agents: agents, animated: animated)
-        card.update(agents: agents, animated: animated)
+        card.update(agents: agents)
         showContent()
     }
 

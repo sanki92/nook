@@ -74,7 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.contentView = host
         host.interaction.makeMenu = { [weak self] in self?.buildMenu() ?? NSMenu() }
         host.interaction.onClick = { [weak self] point in self?.clicked(point) }
-        host.interaction.onDrag = { [weak self] _, start in self?.drag(from: start) }
+        host.interaction.onDrag = { [weak self] start in self?.drag(from: start) }
         host.interaction.onSwipe = { [weak self] direction in
             guard let self, self.size == .medium else { return }
             self.host.card.step(direction)
