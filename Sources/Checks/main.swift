@@ -145,5 +145,37 @@ let tiny = Display(id: 1, grid: SlotGrid(visibleFrame: CGRect(x: 0, y: 0, width:
 check(resolvePlacement(saved: nil, size: .extraLarge, displays: [tiny], taken: []) == SavedSlot(display: 1, cell: Cell(column: 0, row: 0)), "with no free slot it falls back to 0,0 on the main display")
 check(resolvePlacement(saved: nil, size: .extraLarge, displays: [main], taken: [calendar, weather]).cell == Cell(column: 0, row: 1), "the first launch picks the free slot nearest the top-left")
 
+print("Medium")
+var picker = MediumPicker()
+let calm = [agent("a", .cooking, 1), agent("b", .reading, 2), agent("c", .done, 3)]
+check(picker.current(in: []) == nil, "no agents shows nothing")
+check(picker.current(in: calm) == 0, "it starts on the first agent")
+picker.step(1, in: calm)
+check(calm[picker.current(in: calm)!].id == "b", "a swipe moves to the next agent")
+picker.step(-1, in: calm); picker.step(-1, in: calm)
+check(calm[picker.current(in: calm)!].id == "c", "swiping back from the first wraps around")
+let reordered = [agent("c", .done, 3), agent("a", .cooking, 1), agent("b", .reading, 2)]
+check(reordered[picker.current(in: reordered)!].id == "c", "a swiped agent stays shown when the order changes")
+check(picker.current(in: [agent("a", .cooking, 1)]) == 0 && picker.chosen == nil, "a swiped agent that ends is forgotten")
+var solo = MediumPicker()
+solo.step(1, in: [agent("x", .cooking, 1)])
+check(solo.current(in: [agent("x", .cooking, 1)]) == 0, "one agent: a swipe does nothing")
+var jump = MediumPicker()
+let before = [agent("a", .cooking, 1), agent("b", .reading, 2)]
+jump.step(1, in: before)
+let oneWaiting = [agent("a", .gate, 1), agent("b", .reading, 2)]
+check(oneWaiting[jump.current(in: oneWaiting)!].id == "a", "an agent that needs you takes over")
+let twoWaiting = [agent("z", .gate, 0), agent("a", .gate, 1), agent("b", .reading, 2)]
+check(twoWaiting[jump.current(in: twoWaiting)!].id == "a", "a second waiting agent doesn't take over")
+jump.step(1, in: twoWaiting)
+check(twoWaiting[jump.current(in: twoWaiting)!].id == "z", "swiping during a jump moves only between waiting agents")
+let answered = [agent("a", .gate, 1), agent("b", .reading, 2), agent("z", .cooking, 0)]
+check(answered[jump.current(in: answered)!].id == "a", "after one is answered it moves to the next waiting agent")
+check(before[jump.current(in: before)!].id == "b", "once none are waiting it returns to the swiped agent")
+var fresh = MediumPicker()
+_ = fresh.current(in: oneWaiting)
+let later = [agent("b", .reading, 2), agent("a", .cooking, 1)]
+check(fresh.current(in: later) == 0, "with no swipe it returns to whatever is first")
+
 print(failures == 0 ? "\nAll checks passed." : "\n\(failures) check(s) FAILED.")
 exit(failures == 0 ? 0 : 1)
