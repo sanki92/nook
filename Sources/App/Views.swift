@@ -38,6 +38,7 @@ extension CAGradientLayer {
 
     func fade(faded: Bool, gate: Bool, animated: Bool) {
         let target: Float = faded ? (gate ? 0.66 : 0.10) : 0.78
+        if !animated { removeAnimation(forKey: "fade") }
         guard opacity != target else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
