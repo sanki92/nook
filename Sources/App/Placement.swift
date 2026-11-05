@@ -11,8 +11,9 @@ extension NSScreen {
 func realWidgetFrames() -> [CGRect] {
     let height = NSScreen.screens.first?.frame.height ?? 0
     let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
+    let layers = Int(CGWindowLevelForKey(.desktopIconWindow))..<Int(CGWindowLevelForKey(.normalWindow))
     return windows.compactMap { info in
-        guard info[kCGWindowLayer as String] as? Int == widgetLevel.rawValue,
+        guard let layer = info[kCGWindowLayer as String] as? Int, layers.contains(layer),
               let pid = info[kCGWindowOwnerPID as String] as? pid_t,
               NSRunningApplication(processIdentifier: pid)?.bundleIdentifier == "com.apple.notificationcenterui",
               let bounds = info[kCGWindowBounds as String] as? NSDictionary,
