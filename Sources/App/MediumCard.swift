@@ -72,19 +72,13 @@ final class MediumCard: NSView {
 
     func update(agents: [Agent], animated: Bool) {
         guard agents != self.agents else { return }
-        let previous = shown
         self.agents = agents
         guard let index = picker.current(in: agents) else {
             shown = nil
             layer?.setPulse(false)
             return
         }
-        guard animated, let previous, previous.id != agents[index].id else {
-            show(index, slide: 0)
-            return
-        }
-        let before = agents.firstIndex { $0.id == previous.id } ?? -1
-        show(index, slide: index > before ? 1 : -1)
+        show(index, slide: 0)
     }
 
     func step(_ direction: Int) {
@@ -136,12 +130,17 @@ final class MediumCard: NSView {
         let previous = shown
         shown = agent
         if direction != 0 {
-            let push = CATransition()
-            push.type = .push
-            push.subtype = direction > 0 ? .fromBottom : .fromTop
-            push.duration = 0.24
-            push.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.25, 1)
-            face.layer?.add(push, forKey: "slide")
+            let rise = CABasicAnimation(keyPath: "transform.translation.y")
+            rise.fromValue = -30 * CGFloat(direction)
+            rise.toValue = 0
+            let appear = CABasicAnimation(keyPath: "opacity")
+            appear.fromValue = 0
+            appear.toValue = 1
+            let slide = CAAnimationGroup()
+            slide.animations = [rise, appear]
+            slide.duration = 0.24
+            slide.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.25, 1)
+            face.layer?.add(slide, forKey: "slide")
         }
         tint.paint(agent.state)
         tint.fade(faded: faded, gate: agent.state == .gate, animated: previous?.id == agent.id)
