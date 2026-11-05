@@ -12,10 +12,72 @@ private let tileColors: [AgentState: (String, String)] = [
     .error: ("#3D1519", "#651F24"),
 ]
 
-private func topToBottom(_ layer: CAGradientLayer, _ top: CGColor, _ bottom: CGColor) {
-    layer.colors = [top, bottom]
-    layer.startPoint = CGPoint(x: 0.5, y: 1)
-    layer.endPoint = CGPoint(x: 0.5, y: 0)
+func phase(for id: String) -> Int {
+    id.utf8.reduce(0) { ($0 &* 31 &+ Int($1)) & 0xFFFF } % 500
+}
+
+func pixelContext(width: Int, height: Int) -> CGContext? {
+    let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+    context?.translateBy(x: 0, y: CGFloat(height))
+    context?.scaleBy(x: 1, y: -1)
+    context?.setShouldAntialias(false)
+    return context
+}
+
+extension CAGradientLayer {
+    func paint(_ state: AgentState) {
+        let colors = tileColors[state]!
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        self.colors = [hex(colors.0), hex(colors.1)]
+        startPoint = CGPoint(x: 0.5, y: 1)
+        endPoint = CGPoint(x: 0.5, y: 0)
+        CATransaction.commit()
+    }
+
+    func fade(faded: Bool, gate: Bool, animated: Bool) {
+        let target: Float = faded ? (gate ? 0.66 : 0.10) : 0.78
+        guard opacity != target else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if animated {
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = presentation()?.opacity ?? opacity
+            fade.toValue = target
+            fade.duration = 0.3
+            add(fade, forKey: "fade")
+        }
+        opacity = target
+        CATransaction.commit()
+    }
+}
+
+extension CALayer {
+    func setPulse(_ on: Bool) {
+        removeAnimation(forKey: "pulse")
+        removeAnimation(forKey: "pulse-color")
+        guard on else {
+            borderWidth = 0
+            return
+        }
+        borderWidth = 1
+        borderColor = rgba(255, 214, 140, 0.45)
+        let width = CAKeyframeAnimation(keyPath: "borderWidth")
+        width.values = [1, 1.3, 1.7, 2, 1.7, 1.3]
+        width.calculationMode = .discrete
+        width.duration = 1.6
+        width.repeatCount = .infinity
+        width.isRemovedOnCompletion = false
+        add(width, forKey: "pulse")
+        let color = CAKeyframeAnimation(keyPath: "borderColor")
+        color.values = [0.45, 0.6, 0.8, 0.95, 0.8, 0.6].map { rgba(255, 214, 140, $0) }
+        color.calculationMode = .discrete
+        color.duration = 1.6
+        color.repeatCount = .infinity
+        color.isRemovedOnCompletion = false
+        add(color, forKey: "pulse-color")
+    }
 }
 
 final class TileView: NSView {
@@ -83,11 +145,7 @@ final class TileView: NSView {
 
         if geo != geometry || context == nil {
             geometry = geo
-            context = CGContext(data: nil, width: geo.canvasWidth, height: geo.canvasHeight, bitsPerComponent: 8, bytesPerRow: 0,
-                                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
-            context?.translateBy(x: 0, y: CGFloat(geo.canvasHeight))
-            context?.scaleBy(x: 1, y: -1)
-            context?.setShouldAntialias(false)
+            context = pixelContext(width: geo.canvasWidth, height: geo.canvasHeight)
         }
 
         layer?.cornerRadius = cornerRadius
@@ -99,12 +157,8 @@ final class TileView: NSView {
 
         let state: AgentState
         if case .agent(let s) = content { state = s } else { state = .sleeping }
-        let colors = tileColors[state]!
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        topToBottom(tint, hex(colors.0), hex(colors.1))
-        CATransaction.commit()
-        if contentChanged { setPulse(state == .gate) }
+        tint.paint(state)
+        if contentChanged { layer?.setPulse(state == .gate) }
 
         label.stringValue = name
         label.font = .systemFont(ofSize: geo.nameFontSize, weight: .bold)
@@ -120,45 +174,7 @@ final class TileView: NSView {
     }
 
     func setFaded(_ faded: Bool, animated: Bool) {
-        let target: Float = faded ? (content == .agent(.gate) ? 0.66 : 0.10) : 0.78
-        guard tint.opacity != target else { return }
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        if animated {
-            let fade = CABasicAnimation(keyPath: "opacity")
-            fade.fromValue = tint.presentation()?.opacity ?? tint.opacity
-            fade.toValue = target
-            fade.duration = 0.3
-            tint.add(fade, forKey: "fade")
-        }
-        tint.opacity = target
-        CATransaction.commit()
-    }
-
-    private func setPulse(_ on: Bool) {
-        guard let root = layer else { return }
-        root.removeAnimation(forKey: "pulse")
-        root.removeAnimation(forKey: "pulse-color")
-        guard on else {
-            root.borderWidth = 0
-            return
-        }
-        root.borderWidth = 1
-        root.borderColor = rgba(255, 214, 140, 0.45)
-        let width = CAKeyframeAnimation(keyPath: "borderWidth")
-        width.values = [1, 1.3, 1.7, 2, 1.7, 1.3]
-        width.calculationMode = .discrete
-        width.duration = 1.6
-        width.repeatCount = .infinity
-        width.isRemovedOnCompletion = false
-        root.add(width, forKey: "pulse")
-        let color = CAKeyframeAnimation(keyPath: "borderColor")
-        color.values = [0.45, 0.6, 0.8, 0.95, 0.8, 0.6].map { rgba(255, 214, 140, $0) }
-        color.calculationMode = .discrete
-        color.duration = 1.6
-        color.repeatCount = .infinity
-        color.isRemovedOnCompletion = false
-        root.add(color, forKey: "pulse-color")
+        tint.fade(faded: faded, gate: content == .agent(.gate), animated: animated)
     }
 
     func render(frame: Int) {
@@ -184,6 +200,10 @@ final class TileView: NSView {
 final class InteractionView: NSView {
     var onClick: ((NSPoint) -> Void)?
     var makeMenu: (() -> NSMenu)?
+    var onSwipe: ((Int) -> Void)?
+    private var travel = CGPoint.zero
+    private var swiped = false
+    private var lastWheelSwipe = -TimeInterval.infinity
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { frame.contains(point) ? self : nil }
@@ -207,6 +227,28 @@ final class InteractionView: NSView {
 
     override func rightMouseDown(with event: NSEvent) { showMenu(event) }
 
+    override func scrollWheel(with event: NSEvent) {
+        guard event.momentumPhase.isEmpty else { return }
+        if event.phase.isEmpty {
+            let delta = abs(event.scrollingDeltaY) >= abs(event.scrollingDeltaX) ? event.scrollingDeltaY : event.scrollingDeltaX
+            guard delta != 0, event.timestamp - lastWheelSwipe >= 0.42 else { return }
+            lastWheelSwipe = event.timestamp
+            onSwipe?(delta < 0 ? 1 : -1)
+            return
+        }
+        if event.phase.contains(.began) {
+            travel = .zero
+            swiped = false
+        }
+        guard !swiped else { return }
+        travel.x += event.scrollingDeltaX
+        travel.y += event.scrollingDeltaY
+        let moved = abs(travel.y) >= abs(travel.x) ? travel.y : travel.x
+        guard abs(moved) > 30 else { return }
+        swiped = true
+        onSwipe?(moved < 0 ? 1 : -1)
+    }
+
     private func showMenu(_ event: NSEvent) {
         guard let menu = makeMenu?() else { return }
         NSMenu.popUpContextMenu(menu, with: event, for: self)
@@ -217,12 +259,10 @@ final class BoardView: NSView {
     private var tiles: [String: TileView] = [:]
     private var shown: [Agent]?
     private var laidOutSize: WidgetSize?
-    private let overlay = InteractionView()
     private let noAgentsID = "__none"
     private var frameNumber = 0
     private var faded = false
 
-    var interaction: InteractionView { overlay }
     var size = WidgetSize.extraLarge {
         didSet { if let shown, size != oldValue { update(agents: shown, animated: true) } }
     }
@@ -230,9 +270,6 @@ final class BoardView: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        overlay.frame = bounds
-        overlay.autoresizingMask = [.width, .height]
-        addSubview(overlay)
     }
 
     @available(*, unavailable)
@@ -268,10 +305,10 @@ final class BoardView: NSView {
                 tile = existing
             } else {
                 tile = TileView(frame: target)
-                tile.phase = id.utf8.reduce(0) { ($0 &* 31 &+ Int($1)) & 0xFFFF } % 500
+                tile.phase = phase(for: id)
                 tile.alphaValue = animated && !first ? 0 : 1
                 tiles[id] = tile
-                addSubview(tile, positioned: .below, relativeTo: overlay)
+                addSubview(tile)
                 isNew = true
             }
             tile.configure(content: content, name: name, pid: pid, size: target.size, cornerRadius: cornerRadius, campfirePixel: campfirePixel, extra: extra)
@@ -325,25 +362,34 @@ final class BoardView: NSView {
 
 final class GlassHost: NSView {
     let board: BoardView
+    let card: MediumCard
+    let interaction = InteractionView()
+    private var size: WidgetSize
+    private var agents: [Agent] = []
 
     init(size: WidgetSize, snapshot: Bool = false) {
         let rect = NSRect(origin: .zero, size: size.points)
         board = BoardView(frame: rect)
+        card = MediumCard(frame: rect)
+        self.size = size
         super.init(frame: rect)
         board.size = size
-        board.autoresizingMask = [.width, .height]
+        let content = NSView(frame: rect)
+        for view in [content, board, card] { view.autoresizingMask = [.width, .height] }
+        content.addSubview(board)
+        content.addSubview(card)
         wantsLayer = true
         if snapshot {
             layer?.backgroundColor = hex("#1B1E28")
             layer?.cornerRadius = 26
             layer?.cornerCurve = .continuous
             layer?.masksToBounds = true
-            addSubview(board)
+            addSubview(content)
         } else if #available(macOS 26.0, *) {
             let glass = NSGlassEffectView(frame: rect)
             glass.cornerRadius = 26
             glass.autoresizingMask = [.width, .height]
-            glass.contentView = board
+            glass.contentView = content
             addSubview(glass)
         } else {
             let effect = NSVisualEffectView(frame: rect)
@@ -358,16 +404,43 @@ final class GlassHost: NSView {
             mask.resizingMode = .stretch
             effect.maskImage = mask
             effect.autoresizingMask = [.width, .height]
-            effect.addSubview(board)
+            effect.addSubview(content)
             addSubview(effect)
         }
+        interaction.frame = rect
+        interaction.autoresizingMask = [.width, .height]
+        addSubview(interaction)
+        showContent()
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("not used") }
 
+    func update(agents: [Agent], animated: Bool) {
+        self.agents = agents
+        board.update(agents: agents, animated: animated)
+        card.update(agents: agents, animated: animated)
+        showContent()
+    }
+
+    func setFaded(_ faded: Bool) {
+        board.setFaded(faded)
+        card.setFaded(faded)
+    }
+
+    func tick() {
+        if card.isHidden { board.tick() } else { card.tick() }
+    }
+
     func resize(to size: WidgetSize) {
+        self.size = size
         setFrameSize(size.points)
         board.size = size
+        showContent()
+    }
+
+    private func showContent() {
+        card.isHidden = size != .medium || agents.isEmpty
+        board.isHidden = !card.isHidden
     }
 }

@@ -45,7 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let poller = DispatchQueue(label: "agents.poll", qos: .utility)
     private let demoCount = argument(after: "--demo").flatMap(Int.init)
     private var panel: NSPanel!
-    private var board: BoardView!
+    private var host: GlassHost!
     private var pollTimer: Timer?
     private var frameTimer: Timer?
 
@@ -61,11 +61,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.delegate = self
         applyLevel()
 
-        let host = GlassHost(size: .extraLarge)
+        host = GlassHost(size: .extraLarge)
         panel.contentView = host
-        board = host.board
-        board.interaction.makeMenu = { [weak self] in self?.buildMenu() ?? NSMenu() }
-        board.interaction.onClick = { [weak self] point in self?.clicked(point) }
+        host.interaction.makeMenu = { [weak self] in self?.buildMenu() ?? NSMenu() }
+        host.interaction.onClick = { [weak self] point in self?.clicked(point) }
 
         restorePosition()
         panel.orderFrontRegardless()
@@ -86,23 +85,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func tick() {
         guard panel.occlusionState.contains(.visible) else { return }
-        board.tick()
+        host.tick()
     }
 
     private func refresh(animated: Bool) {
         if let demoCount {
-            board.update(agents: sampleAgents(demoCount), animated: animated)
+            host.update(agents: sampleAgents(demoCount), animated: animated)
             return
         }
         poller.async { [weak self] in
             guard let self else { return }
             let agents = self.store.snapshot()
-            DispatchQueue.main.async { self.board.update(agents: agents, animated: animated) }
+            DispatchQueue.main.async { self.host.update(agents: agents, animated: animated) }
         }
     }
 
     private func clicked(_ point: NSPoint) {
-        guard let pid = board.tile(at: point)?.pid, pid > 0 else { return }
+        guard let pid = host.board.tile(at: point)?.pid, pid > 0 else { return }
         owningApp(of: pid)?.activate()
     }
 
@@ -197,8 +196,9 @@ private func dumpLiveAgents() -> Never {
 private func snapshot(to path: String, size: WidgetSize, count: Int, frame: Int) -> Never {
     let host = GlassHost(size: size, snapshot: true)
     let rect = host.bounds
-    host.board.update(agents: size == .medium ? [] : sampleAgents(count), animated: false)
+    host.update(agents: sampleAgents(count), animated: false)
     host.board.renderTiles(frame: frame)
+    host.card.render(frame: frame)
     let window = NSWindow(contentRect: rect, styleMask: .borderless, backing: .buffered, defer: false)
     window.contentView = host
     host.layoutSubtreeIfNeeded()
