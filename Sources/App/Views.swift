@@ -76,7 +76,7 @@ final class TileView: NSView {
 
     func configure(content: Content, name: String, pid: Int32?, size: CGSize, tileCount: Int, extra: Int) {
         self.pid = pid
-        var geo = tileGeometry(size: size, tileCount: tileCount)
+        var geo = tileGeometry(size: size)
         if content == .noAgents {
             geo = TileGeometry(pixel: 4, compact: false, canvasWidth: Int((size.width / 4).rounded(.up)), canvasHeight: Int((size.height / 4).rounded(.up)), offsetX: 0, offsetY: 0, nameFontSize: 19, nameBottom: 14)
         }
@@ -230,9 +230,9 @@ final class BoardView: NSView {
         let first = shown == nil
         shown = agents
 
-        let visible = Array(agents.prefix(WidgetMetrics.maxTiles))
+        let visible = Array(agents.prefix(WidgetSize.extraLarge.maxTiles))
         let extra = agents.count - visible.count
-        let rects = tileRects(count: visible.count)
+        let rects = tileRects(count: visible.count, size: .extraLarge)
         let height = bounds.height
         func flipped(_ r: CGRect) -> CGRect { CGRect(x: r.minX, y: height - r.maxY, width: r.width, height: r.height) }
 

@@ -68,22 +68,31 @@ check(order == ["e", "d", "c", "b", "a"], "needs you, error, working, done, rest
 check(sortedAgents([agent("new", .cooking, 2), agent("old", .reading, 1)]).map(\.id) == ["old", "new"], "working agents keep a stable order")
 
 print("Layout")
-for count in 0...12 {
-    let rects = tileRects(count: count)
-    check(rects.count == max(count, 1), "\(count) agents get \(max(count, 1)) tiles")
-    let bounds = CGRect(origin: .zero, size: WidgetMetrics.size).insetBy(dx: WidgetMetrics.inset - 0.01, dy: WidgetMetrics.inset - 0.01)
-    check(rects.allSatisfy { bounds.contains($0) }, "\(count) agents stay inside the widget")
-    var overlaps = false
-    for i in rects.indices { for j in rects.indices where i < j && rects[i].insetBy(dx: 0.01, dy: 0.01).intersects(rects[j]) { overlaps = true } }
-    check(!overlaps, "\(count) agents don't overlap")
-    let area = rects.reduce(0) { $0 + $1.width * $1.height }
-    check(area > 0.8 * (684 * 324), "\(count) agents fill the space")
+for size in [WidgetSize.large, .extraLarge] {
+    for count in 1...size.maxTiles {
+        let rects = tileRects(count: count, size: size)
+        check(rects.count == count, "\(size.title): \(count) agents get \(count) tiles")
+        let bounds = CGRect(origin: .zero, size: size.points).insetBy(dx: -0.01, dy: -0.01)
+        check(rects.allSatisfy { bounds.contains($0) }, "\(size.title): \(count) stay inside")
+        var overlaps = false
+        for i in rects.indices { for j in rects.indices where i < j && rects[i].insetBy(dx: 0.01, dy: 0.01).intersects(rects[j]) { overlaps = true } }
+        check(!overlaps, "\(size.title): \(count) don't overlap")
+    }
 }
-check(tileRects(count: 3)[0].height > tileRects(count: 3)[1].height, "the first of 3 tiles is the biggest")
-check(tileGeometry(size: tileRects(count: 1)[0].size, tileCount: 1).pixel == 5, "1 agent gets the biggest art")
-check(tileGeometry(size: tileRects(count: 4)[0].size, tileCount: 4).pixel == 3, "4 agents get medium art")
-check(tileGeometry(size: tileRects(count: 8)[0].size, tileCount: 8).pixel == 2, "8 agents get small art")
-check(tileGeometry(size: tileRects(count: 9)[0].size, tileCount: 9).compact, "9 agents switch to compact")
+check(WidgetSize.medium.points == CGSize(width: 344, height: 164), "Medium is 344×164")
+check(WidgetSize.large.points == CGSize(width: 344, height: 344), "Large is 344×344")
+check(WidgetSize.extraLarge.points == CGSize(width: 704, height: 344), "Extra Large is 704×344")
+check(tileRects(count: 1, size: .large) == [CGRect(x: 0, y: 0, width: 344, height: 344)], "one agent fills the widget")
+let two = tileRects(count: 2, size: .large)
+check(two[0].minX == two[1].minX && two[1].minY > two[0].maxY, "2 agents on Large stack top and bottom")
+let three = tileRects(count: 3, size: .large)
+check(three[0].width > three[1].width && three[1].minY == three[2].minY, "3 on Large: one wide tile on top, two below")
+check(tileRects(count: 3, size: .extraLarge)[0].height > tileRects(count: 3, size: .extraLarge)[1].height, "3 on Extra Large: one tall tile plus two")
+check(tileRects(count: 2, size: .large)[0].minX == 6, "tiles have a 6pt inset")
+check(tileGeometry(size: CGSize(width: 157, height: 200)).compact, "narrower than 158 is compact")
+check(tileGeometry(size: CGSize(width: 200, height: 113)).compact, "shorter than 114 is compact")
+check(!tileGeometry(size: tileRects(count: 4, size: .large)[0].size).compact, "4 on Large keep full scenes")
+check(tileGeometry(size: tileRects(count: 1, size: .extraLarge)[0].size).pixel == 5, "1 agent on Extra Large gets the biggest art")
 
 print("Reading session files")
 let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("widget-checks-\(UUID().uuidString)")

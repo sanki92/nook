@@ -51,7 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func applicationDidFinishLaunching(_ note: Notification) {
         NSApp.setActivationPolicy(.accessory)
-        let frame = NSRect(origin: .zero, size: WidgetMetrics.size)
+        let frame = NSRect(origin: .zero, size: WidgetSize.extraLarge.points)
         panel = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -194,7 +194,7 @@ private func dumpLiveAgents() -> Never {
 }
 
 private func snapshot(to path: String, count: Int, frame: Int) -> Never {
-    let rect = NSRect(origin: .zero, size: WidgetMetrics.size)
+    let rect = NSRect(origin: .zero, size: WidgetSize.extraLarge.points)
     let board = BoardView(frame: rect)
     board.update(agents: sampleAgents(count), animated: false)
     board.renderTiles(frame: frame)

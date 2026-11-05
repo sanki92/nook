@@ -2,19 +2,45 @@ import CoreGraphics
 import Foundation
 
 enum WidgetMetrics {
-    static let size = CGSize(width: 704, height: 344)
-    static let inset: CGFloat = 10
-    static let gap: CGFloat = 8
-    static let fullSceneLimit = 8
-    static let maxTiles = 12
+    static let cell: CGFloat = 180
+    static let margin: CGFloat = 8
+    static let tileInset: CGFloat = 6
+    static let tileGap: CGFloat = 6
 }
 
-func tileRects(count: Int) -> [CGRect] {
-    let inset = WidgetMetrics.inset, gap = WidgetMetrics.gap
-    let width = WidgetMetrics.size.width - inset * 2
-    let height = WidgetMetrics.size.height - inset * 2
+enum WidgetSize: String, CaseIterable {
+    case medium, large, extraLarge
 
-    if count == 3 {
+    var columns: Int { self == .extraLarge ? 4 : 2 }
+    var rows: Int { self == .medium ? 1 : 2 }
+    var points: CGSize {
+        CGSize(width: CGFloat(columns) * WidgetMetrics.cell - WidgetMetrics.margin * 2,
+               height: CGFloat(rows) * WidgetMetrics.cell - WidgetMetrics.margin * 2)
+    }
+    var title: String {
+        switch self {
+        case .medium: return "Medium"
+        case .large: return "Large"
+        case .extraLarge: return "Extra Large"
+        }
+    }
+    var maxTiles: Int {
+        switch self {
+        case .medium: return 1
+        case .large: return 9
+        case .extraLarge: return 12
+        }
+    }
+}
+
+func tileRects(count: Int, size: WidgetSize) -> [CGRect] {
+    let full = CGRect(origin: .zero, size: size.points)
+    if count <= 1 || size == .medium { return [full] }
+    let inset = WidgetMetrics.tileInset, gap = WidgetMetrics.tileGap
+    let width = full.width - inset * 2
+    let height = full.height - inset * 2
+
+    if count == 3 && size == .extraLarge {
         let w = (width - gap) / 2, h = (height - gap) / 2
         return [
             CGRect(x: inset, y: inset, width: w, height: height),
@@ -24,18 +50,31 @@ func tileRects(count: Int) -> [CGRect] {
     }
 
     let rows: [Int]
-    switch count {
-    case ...1: rows = [1]
-    case 2: rows = [2]
-    case 4: rows = [2, 2]
-    case 5: rows = [2, 3]
-    case 6: rows = [3, 3]
-    case 7: rows = [3, 4]
-    case 8: rows = [4, 4]
-    case 9: rows = [3, 3, 3]
-    case 10: rows = [3, 3, 4]
-    case 11: rows = [3, 4, 4]
-    default: rows = [4, 4, 4]
+    switch size {
+    case .large:
+        switch count {
+        case 2: rows = [1, 1]
+        case 3: rows = [1, 2]
+        case 4: rows = [2, 2]
+        case 5: rows = [2, 3]
+        case 6: rows = [3, 3]
+        case 7: rows = [2, 2, 3]
+        case 8: rows = [2, 3, 3]
+        default: rows = [3, 3, 3]
+        }
+    default:
+        switch count {
+        case 2: rows = [2]
+        case 4: rows = [2, 2]
+        case 5: rows = [2, 3]
+        case 6: rows = [3, 3]
+        case 7: rows = [3, 4]
+        case 8: rows = [4, 4]
+        case 9: rows = [3, 3, 3]
+        case 10: rows = [3, 3, 4]
+        case 11: rows = [3, 4, 4]
+        default: rows = [4, 4, 4]
+        }
     }
 
     let h = (height - gap * CGFloat(rows.count - 1)) / CGFloat(rows.count)
@@ -60,9 +99,9 @@ struct TileGeometry: Equatable {
     var nameBottom: CGFloat
 }
 
-func tileGeometry(size: CGSize, tileCount: Int) -> TileGeometry {
+func tileGeometry(size: CGSize) -> TileGeometry {
     let sceneWidth = 86.0
-    let compact = tileCount > WidgetMetrics.fullSceneLimit
+    let compact = size.width < 158 || size.height < 114
     let tall = size.height > 200
     let nameHeight: CGFloat = compact ? 25 : (tall ? 42 : 26)
     let available = size.height - nameHeight
