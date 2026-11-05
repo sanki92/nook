@@ -323,7 +323,7 @@ if CommandLine.arguments.contains("--dump") { dumpLiveAgents() }
 let app = NSApplication.shared
 if let path = argument(after: "--snapshot") {
     app.setActivationPolicy(.prohibited)
-    snapshot(to: path, size: argument(after: "--size").flatMap(WidgetSize.init(rawValue:)) ?? .extraLarge, count: argument(after: "--demo").flatMap(Int.init) ?? 4, frame: argument(after: "--frame").flatMap(Int.init) ?? 7)
+    snapshot(to: path, size: argument(after: "--size").flatMap { $0 == "xl" ? .extraLarge : WidgetSize(rawValue: $0) } ?? .extraLarge, count: argument(after: "--demo").flatMap(Int.init) ?? 4, frame: argument(after: "--frame").flatMap(Int.init) ?? 7)
 }
 let delegate = AppDelegate()
 app.delegate = delegate
