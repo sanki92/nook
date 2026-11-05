@@ -215,7 +215,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         follow()
-        while let next = panel.nextEvent(matching: [.leftMouseUp, .leftMouseDragged]), next.type == .leftMouseDragged { follow() }
+        while let next = panel.nextLeftMouseEvent(), next.type == .leftMouseDragged { follow() }
         outline.hide()
         dragging = false
         if let target {

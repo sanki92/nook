@@ -198,6 +198,18 @@ final class TileView: NSView {
     }
 }
 
+extension NSWindow {
+    func nextLeftMouseEvent() -> NSEvent? {
+        while true {
+            let released = NSEvent.pressedMouseButtons & 1 == 0
+            if let event = nextEvent(matching: [.leftMouseUp, .leftMouseDragged], until: Date(timeIntervalSinceNow: 0.1), inMode: .eventTracking, dequeue: true) {
+                return event
+            }
+            if released { return nil }
+        }
+    }
+}
+
 final class InteractionView: NSView {
     var onClick: ((NSPoint) -> Void)?
     var makeMenu: (() -> NSMenu)?
@@ -214,7 +226,7 @@ final class InteractionView: NSView {
         if event.modifierFlags.contains(.control) { showMenu(event); return }
         guard let window else { return }
         let start = event.locationInWindow
-        while let next = window.nextEvent(matching: [.leftMouseUp, .leftMouseDragged]) {
+        while let next = window.nextLeftMouseEvent() {
             if next.type == .leftMouseUp {
                 onClick?(convert(next.locationInWindow, from: nil))
                 return
