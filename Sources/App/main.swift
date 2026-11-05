@@ -142,7 +142,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func fade(for app: NSRunningApplication?) {
-        host.setFaded(app?.bundleIdentifier != "com.apple.finder")
+        let id = app?.bundleIdentifier
+        host.setFaded(id != "com.apple.finder" && (id == nil || id != Bundle.main.bundleIdentifier))
     }
 
     private var savedSlot: SavedSlot? {
