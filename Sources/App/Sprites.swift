@@ -447,7 +447,7 @@ extension Pen {
         }
         px(hex("#121830"), 0, groundY + 10, w, max(0, h - groundY - 10))
 
-        let tentX = w / 2 - 62, tentW = 36, tentH = 24
+        let tentX = max(2, w / 2 - 62), tentW = 36, tentH = 24
         for row in 0..<tentH {
             let half = row * tentW / (2 * tentH)
             let cx = tentX + tentW / 2

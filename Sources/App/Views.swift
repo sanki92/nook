@@ -22,7 +22,7 @@ final class TileView: NSView {
     enum Content: Equatable { case agent(AgentState), noAgents }
 
     private let canvas = CALayer()
-    private let sheen = CAGradientLayer()
+    private let tint = CAGradientLayer()
     private let label = NSTextField(labelWithString: "")
     private let moreBadge = NSTextField(labelWithString: "")
     private var context: CGContext?
@@ -31,29 +31,21 @@ final class TileView: NSView {
     var pid: Int32?
     var phase = 0
 
-    override func makeBackingLayer() -> CALayer { CAGradientLayer() }
-
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
         guard let root = layer else { return }
-        root.cornerRadius = 20
         root.cornerCurve = .continuous
         root.masksToBounds = true
+
+        tint.frame = bounds
+        tint.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
+        tint.opacity = 0.78
+        root.addSublayer(tint)
 
         canvas.magnificationFilter = .nearest
         canvas.minificationFilter = .nearest
         root.addSublayer(canvas)
-
-        topToBottom(sheen, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0))
-        sheen.locations = [0, 0.4]
-        sheen.frame = bounds
-        sheen.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
-        sheen.cornerRadius = 20
-        sheen.cornerCurve = .continuous
-        sheen.borderWidth = 0.5
-        sheen.borderColor = rgba(255, 255, 255, 0.14)
-        root.addSublayer(sheen)
 
         label.textColor = .white
         label.lineBreakMode = .byTruncatingTail
@@ -74,11 +66,12 @@ final class TileView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("not used") }
 
-    func configure(content: Content, name: String, pid: Int32?, size: CGSize, tileCount: Int, extra: Int) {
+    func configure(content: Content, name: String, pid: Int32?, size: CGSize, cornerRadius: CGFloat, campfirePixel: Int, extra: Int) {
         self.pid = pid
         var geo = tileGeometry(size: size)
         if content == .noAgents {
-            geo = TileGeometry(pixel: 4, compact: false, canvasWidth: Int((size.width / 4).rounded(.up)), canvasHeight: Int((size.height / 4).rounded(.up)), offsetX: 0, offsetY: 0, nameFontSize: 19, nameBottom: 14)
+            let p = CGFloat(campfirePixel), tall = size.height > 200
+            geo = TileGeometry(pixel: campfirePixel, compact: false, canvasWidth: Int((size.width / p).rounded(.up)), canvasHeight: Int((size.height / p).rounded(.up)), offsetX: 0, offsetY: 0, nameFontSize: tall ? 19 : 15, nameBottom: tall ? 14 : 8)
         }
         let contentChanged = content != self.content
         self.content = content
@@ -92,6 +85,7 @@ final class TileView: NSView {
             context?.setShouldAntialias(false)
         }
 
+        layer?.cornerRadius = cornerRadius
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         let canvasSize = CGSize(width: geo.canvasWidth * geo.pixel, height: geo.canvasHeight * geo.pixel)
@@ -101,7 +95,10 @@ final class TileView: NSView {
         let state: AgentState
         if case .agent(let s) = content { state = s } else { state = .sleeping }
         let colors = tileColors[state]!
-        if let root = layer as? CAGradientLayer { topToBottom(root, hex(colors.0), hex(colors.1)) }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        topToBottom(tint, hex(colors.0), hex(colors.1))
+        CATransaction.commit()
         if contentChanged { setPulse(state == .gate) }
 
         label.stringValue = name
@@ -115,6 +112,20 @@ final class TileView: NSView {
             moreBadge.sizeToFit()
             moreBadge.frame.origin = CGPoint(x: size.width - moreBadge.frame.width - 7, y: size.height - moreBadge.frame.height - 7)
         }
+    }
+
+    func setFaded(_ faded: Bool) {
+        let target: Float = faded ? (content == .agent(.gate) ? 0.66 : 0.10) : 0.78
+        guard tint.opacity != target else { return }
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = tint.presentation()?.opacity ?? tint.opacity
+        fade.toValue = target
+        fade.duration = 0.3
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        tint.opacity = target
+        tint.add(fade, forKey: "fade")
+        CATransaction.commit()
     }
 
     private func setPulse(_ on: Bool) {
@@ -198,25 +209,20 @@ final class InteractionView: NSView {
 final class BoardView: NSView {
     private var tiles: [String: TileView] = [:]
     private var shown: [Agent]?
+    private var laidOutSize: WidgetSize?
     private let overlay = InteractionView()
     private let noAgentsID = "__none"
     private var frameNumber = 0
+    private var faded = false
 
     var interaction: InteractionView { overlay }
-
-    override func makeBackingLayer() -> CALayer { CAGradientLayer() }
+    var size = WidgetSize.extraLarge {
+        didSet { if let shown, size != oldValue { update(agents: shown, animated: true) } }
+    }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        if let root = layer as? CAGradientLayer {
-            topToBottom(root, hex("#24262F"), hex("#16171D"))
-            root.cornerRadius = 30
-            root.cornerCurve = .continuous
-            root.masksToBounds = true
-            root.borderWidth = 0.5
-            root.borderColor = rgba(255, 255, 255, 0.22)
-        }
         overlay.frame = bounds
         overlay.autoresizingMask = [.width, .height]
         addSubview(overlay)
@@ -226,14 +232,22 @@ final class BoardView: NSView {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     func update(agents: [Agent], animated: Bool) {
-        if shown == agents { return }
+        if shown == agents && laidOutSize == size { return }
         let first = shown == nil
         shown = agents
+        laidOutSize = size
 
-        let visible = Array(agents.prefix(WidgetSize.extraLarge.maxTiles))
+        let visible = Array(agents.prefix(size.maxTiles))
         let extra = agents.count - visible.count
-        let rects = tileRects(count: visible.count, size: .extraLarge)
-        let height = bounds.height
+        let rects = tileRects(count: visible.count, size: size)
+        let height = size.points.height
+        let cornerRadius: CGFloat = visible.count > 1 ? 20 : 26
+        let campfirePixel: Int
+        switch size {
+        case .extraLarge: campfirePixel = 4
+        case .large: campfirePixel = 3
+        case .medium: campfirePixel = 2
+        }
         func flipped(_ r: CGRect) -> CGRect { CGRect(x: r.minX, y: height - r.maxY, width: r.width, height: r.height) }
 
         var ids: [String] = []
@@ -253,7 +267,8 @@ final class BoardView: NSView {
                 addSubview(tile, positioned: .below, relativeTo: overlay)
                 isNew = true
             }
-            tile.configure(content: content, name: name, pid: pid, size: target.size, tileCount: visible.count, extra: extra)
+            tile.configure(content: content, name: name, pid: pid, size: target.size, cornerRadius: cornerRadius, campfirePixel: campfirePixel, extra: extra)
+            tile.setFaded(faded)
             work.append((tile, target, isNew))
         }
 
@@ -281,6 +296,11 @@ final class BoardView: NSView {
         renderTiles()
     }
 
+    func setFaded(_ faded: Bool) {
+        self.faded = faded
+        for tile in tiles.values { tile.setFaded(faded) }
+    }
+
     func tick() {
         frameNumber += 1
         renderTiles()
@@ -293,5 +313,54 @@ final class BoardView: NSView {
 
     func tile(at point: NSPoint) -> TileView? {
         tiles.values.first { $0.frame.contains(point) }
+    }
+}
+
+final class GlassHost: NSView {
+    let board: BoardView
+
+    init(size: WidgetSize, snapshot: Bool = false) {
+        let rect = NSRect(origin: .zero, size: size.points)
+        board = BoardView(frame: rect)
+        super.init(frame: rect)
+        board.size = size
+        board.autoresizingMask = [.width, .height]
+        wantsLayer = true
+        if snapshot {
+            layer?.backgroundColor = hex("#1B1E28")
+            layer?.cornerRadius = 26
+            layer?.cornerCurve = .continuous
+            layer?.masksToBounds = true
+            addSubview(board)
+        } else if #available(macOS 26.0, *) {
+            let glass = NSGlassEffectView(frame: rect)
+            glass.cornerRadius = 26
+            glass.autoresizingMask = [.width, .height]
+            glass.contentView = board
+            addSubview(glass)
+        } else {
+            let effect = NSVisualEffectView(frame: rect)
+            effect.material = .hudWindow
+            effect.blendingMode = .behindWindow
+            effect.state = .active
+            let mask = NSImage(size: NSSize(width: 53, height: 53), flipped: false) { bounds in
+                NSBezierPath(roundedRect: bounds, xRadius: 26, yRadius: 26).fill()
+                return true
+            }
+            mask.capInsets = NSEdgeInsets(top: 26, left: 26, bottom: 26, right: 26)
+            mask.resizingMode = .stretch
+            effect.maskImage = mask
+            effect.autoresizingMask = [.width, .height]
+            effect.addSubview(board)
+            addSubview(effect)
+        }
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    func resize(to size: WidgetSize) {
+        setFrameSize(size.points)
+        board.size = size
     }
 }

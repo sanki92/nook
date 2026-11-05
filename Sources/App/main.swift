@@ -61,8 +61,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.delegate = self
         applyLevel()
 
-        board = BoardView(frame: frame)
-        panel.contentView = board
+        let host = GlassHost(size: .extraLarge)
+        panel.contentView = host
+        board = host.board
         board.interaction.makeMenu = { [weak self] in self?.buildMenu() ?? NSMenu() }
         board.interaction.onClick = { [weak self] point in self?.clicked(point) }
 
@@ -193,15 +194,15 @@ private func dumpLiveAgents() -> Never {
     exit(0)
 }
 
-private func snapshot(to path: String, count: Int, frame: Int) -> Never {
-    let rect = NSRect(origin: .zero, size: WidgetSize.extraLarge.points)
-    let board = BoardView(frame: rect)
-    board.update(agents: sampleAgents(count), animated: false)
-    board.renderTiles(frame: frame)
+private func snapshot(to path: String, size: WidgetSize, count: Int, frame: Int) -> Never {
+    let host = GlassHost(size: size, snapshot: true)
+    let rect = host.bounds
+    host.board.update(agents: size == .medium ? [] : sampleAgents(count), animated: false)
+    host.board.renderTiles(frame: frame)
     let window = NSWindow(contentRect: rect, styleMask: .borderless, backing: .buffered, defer: false)
-    window.contentView = board
-    board.layoutSubtreeIfNeeded()
-    board.displayIfNeeded()
+    window.contentView = host
+    host.layoutSubtreeIfNeeded()
+    host.displayIfNeeded()
     CATransaction.flush()
 
     let scale = 2
@@ -209,7 +210,7 @@ private func snapshot(to path: String, count: Int, frame: Int) -> Never {
                             space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
     context.scaleBy(x: CGFloat(scale), y: CGFloat(scale))
     context.interpolationQuality = .none
-    board.layer?.render(in: context)
+    host.layer?.render(in: context)
     let rep = NSBitmapImageRep(cgImage: context.makeImage()!)
     try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
     print("saved \(path)")
@@ -221,7 +222,7 @@ if CommandLine.arguments.contains("--dump") { dumpLiveAgents() }
 let app = NSApplication.shared
 if let path = argument(after: "--snapshot") {
     app.setActivationPolicy(.prohibited)
-    snapshot(to: path, count: argument(after: "--demo").flatMap(Int.init) ?? 4, frame: argument(after: "--frame").flatMap(Int.init) ?? 7)
+    snapshot(to: path, size: argument(after: "--size").flatMap(WidgetSize.init(rawValue:)) ?? .extraLarge, count: argument(after: "--demo").flatMap(Int.init) ?? 4, frame: argument(after: "--frame").flatMap(Int.init) ?? 7)
 }
 let delegate = AppDelegate()
 app.delegate = delegate
