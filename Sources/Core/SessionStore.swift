@@ -18,6 +18,7 @@ final class SessionStore {
     private let root: URL
     private let alive: (Int32) -> Bool
     private var cache: [String: Cached] = [:]
+    private var lastRecords: [String: SessionRecord] = [:]
     private let tailBytes: UInt64 = 1_000_000
 
     init(root: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude"),
@@ -31,11 +32,13 @@ final class SessionStore {
         let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
         var agents: [Agent] = []
         var seen = Set<String>()
+        var records: [String: SessionRecord] = [:]
 
         for file in files where file.pathExtension == "json" {
-            guard let data = try? Data(contentsOf: file),
-                  let record = try? JSONDecoder().decode(SessionRecord.self, from: data),
+            let decoded = (try? Data(contentsOf: file)).flatMap { try? JSONDecoder().decode(SessionRecord.self, from: $0) }
+            guard let record = decoded ?? lastRecords[file.path],
                   let pid = record.pid, let id = record.sessionId, alive(pid) else { continue }
+            records[file.path] = record
             seen.insert(id)
             let entry = refreshed(id: id, now: now)
             agents.append(Agent(
@@ -46,6 +49,7 @@ final class SessionStore {
                 startedAt: record.startedAt ?? 0))
         }
         cache = cache.filter { seen.contains($0.key) }
+        lastRecords = records
         return sortedAgents(agents)
     }
 
