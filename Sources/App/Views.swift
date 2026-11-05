@@ -201,6 +201,7 @@ final class InteractionView: NSView {
     var onClick: ((NSPoint) -> Void)?
     var makeMenu: (() -> NSMenu)?
     var onSwipe: ((Int) -> Void)?
+    var onDrag: ((NSEvent, NSPoint) -> Void)?
     private var travel = CGPoint.zero
     private var swiped = false
     private var lastWheelSwipe = -TimeInterval.infinity
@@ -219,7 +220,7 @@ final class InteractionView: NSView {
             }
             let moved = hypot(next.locationInWindow.x - start.x, next.locationInWindow.y - start.y)
             if moved > 3 {
-                window.performDrag(with: event)
+                onDrag?(event, window.convertPoint(toScreen: start))
                 return
             }
         }

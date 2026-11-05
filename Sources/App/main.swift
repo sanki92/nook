@@ -39,36 +39,53 @@ func owningApp(of pid: pid_t) -> NSRunningApplication? {
     return nil
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate {
     private let defaults = UserDefaults.standard
     private let store = SessionStore()
     private let poller = DispatchQueue(label: "agents.poll", qos: .utility)
     private let demoCount = argument(after: "--demo").flatMap(Int.init)
     private var panel: NSPanel!
     private var host: GlassHost!
+    private var outline: PlacementOutline!
     private var pollTimer: Timer?
     private var frameTimer: Timer?
+    private var size = WidgetSize.extraLarge
+    private var realWidgets: [CGRect] = []
+    private var dragging = false
+    private var screensChangedWhileDragging = false
 
     func applicationDidFinishLaunching(_ note: Notification) {
         NSApp.setActivationPolicy(.accessory)
-        let frame = NSRect(origin: .zero, size: WidgetSize.extraLarge.points)
+        for key in ["originX", "originY", "keepOnTop"] { defaults.removeObject(forKey: key) }
+        size = defaults.string(forKey: "size").flatMap(WidgetSize.init(rawValue:)) ?? .extraLarge
+        let frame = NSRect(origin: .zero, size: size.points)
         panel = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
-        panel.delegate = self
-        applyLevel()
+        panel.level = widgetLevel
+        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        outline = PlacementOutline(below: panel)
 
-        host = GlassHost(size: .extraLarge)
+        host = GlassHost(size: size)
         panel.contentView = host
         host.interaction.makeMenu = { [weak self] in self?.buildMenu() ?? NSMenu() }
         host.interaction.onClick = { [weak self] point in self?.clicked(point) }
+        host.interaction.onDrag = { [weak self] _, start in self?.drag(from: start) }
+        host.interaction.onSwipe = { [weak self] direction in
+            guard let self, self.size == .medium else { return }
+            self.host.card.step(direction)
+        }
 
-        restorePosition()
+        realWidgets = realWidgetFrames()
+        let launch = placement(for: size)
+        panel.setFrame(launch.frame, display: false)
+        if launch.free { savedSlot = launch.slot }
         panel.orderFrontRegardless()
 
+        fade(for: NSWorkspace.shared.frontmostApplication)
         refresh(animated: false)
         let poll = Timer(timeInterval: 1, repeats: true) { [weak self] _ in self?.refresh(animated: true) }
         poll.tolerance = 0.2
@@ -81,6 +98,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         frameTimer = frames
 
         NotificationCenter.default.addObserver(self, selector: #selector(screensChanged), name: NSApplication.didChangeScreenParametersNotification, object: nil)
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(appActivated), name: NSWorkspace.didActivateApplicationNotification, object: nil)
     }
 
     private func tick() {
@@ -101,71 +119,145 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func clicked(_ point: NSPoint) {
-        guard let pid = host.board.tile(at: point)?.pid, pid > 0 else { return }
+        let pid: Int32?
+        if size == .medium {
+            let card = host.card
+            card.layoutSubtreeIfNeeded()
+            if let index = card.dot(at: card.convert(point, from: host.interaction)) {
+                card.select(index: index)
+                return
+            }
+            pid = card.shownPID
+        } else {
+            pid = host.board.tile(at: host.board.convert(point, from: host.interaction))?.pid
+        }
+        guard let pid, pid > 0 else { return }
         owningApp(of: pid)?.activate()
     }
 
-    private var keepOnTop: Bool {
-        get { defaults.bool(forKey: "keepOnTop") }
-        set { defaults.set(newValue, forKey: "keepOnTop") }
+    @objc private func appActivated(_ note: Notification) {
+        fade(for: note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)
     }
 
-    private func applyLevel() {
-        if keepOnTop {
-            panel.level = .floating
-            panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
-        } else {
-            panel.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
-            panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+    private func fade(for app: NSRunningApplication?) {
+        host.setFaded(app?.bundleIdentifier != "com.apple.finder")
+    }
+
+    private var savedSlot: SavedSlot? {
+        get {
+            guard defaults.object(forKey: "slotDisplay") != nil else { return nil }
+            return SavedSlot(display: UInt32(truncatingIfNeeded: defaults.integer(forKey: "slotDisplay")),
+                             cell: Cell(column: defaults.integer(forKey: "slotColumn"), row: defaults.integer(forKey: "slotRow")))
+        }
+        set {
+            guard let newValue else { return }
+            defaults.set(Int(newValue.display), forKey: "slotDisplay")
+            defaults.set(newValue.cell.column, forKey: "slotColumn")
+            defaults.set(newValue.cell.row, forKey: "slotRow")
         }
     }
 
-    private func restorePosition() {
-        if defaults.object(forKey: "originX") != nil {
-            panel.setFrameOrigin(NSPoint(x: defaults.double(forKey: "originX"), y: defaults.double(forKey: "originY")))
-        } else {
-            placeAtDefault()
+    private func placement(for size: WidgetSize) -> (slot: SavedSlot, frame: CGRect, free: Bool) {
+        let displays = currentDisplays()
+        let slot = resolvePlacement(saved: savedSlot, size: size, displays: displays, taken: realWidgets)
+        let grid = displays.first { $0.id == slot.display }?.grid ?? SlotGrid(visibleFrame: .zero)
+        return (slot, grid.frame(slot.cell, size), grid.isFree(slot.cell, size, taken: realWidgets))
+    }
+
+    private func move(to frame: CGRect) {
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.34
+            ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.25, 1)
+            panel.animator().setFrame(frame, display: true)
         }
-        keepOnScreen()
     }
 
-    private func placeAtDefault() {
-        guard let area = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame else { return }
-        panel.setFrameOrigin(NSPoint(x: area.maxX - panel.frame.width - 24, y: area.maxY - panel.frame.height - 24))
+    @objc private func screensChanged() {
+        if dragging {
+            screensChangedWhileDragging = true
+            return
+        }
+        realWidgets = realWidgetFrames()
+        let next = placement(for: size)
+        guard next.free else { return }
+        savedSlot = next.slot
+        move(to: next.frame)
     }
 
-    private func keepOnScreen() {
-        let onScreen = NSScreen.screens.contains { $0.visibleFrame.intersection(panel.frame).width > 80 && $0.visibleFrame.intersection(panel.frame).height > 80 }
-        if !onScreen { placeAtDefault() }
-    }
+    private func drag(from start: NSPoint) {
+        let home = NSRect(x: panel.frame.minX, y: panel.frame.maxY - size.points.height, width: size.points.width, height: size.points.height)
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0
+            panel.animator().setFrame(home, display: true)
+        }
+        dragging = true
+        realWidgets = realWidgetFrames()
+        var target: (slot: SavedSlot, frame: CGRect)?
 
-    @objc private func screensChanged() { keepOnScreen() }
+        func follow() {
+            let mouse = NSEvent.mouseLocation
+            panel.setFrameOrigin(NSPoint(x: home.minX + mouse.x - start.x, y: home.minY + mouse.y - start.y))
+            guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) else { return }
+            let grid = SlotGrid(visibleFrame: screen.visibleFrame)
+            if let cell = grid.nearestFree(toTopLeft: CGPoint(x: panel.frame.minX, y: panel.frame.maxY), size, taken: realWidgets) {
+                let slot = (slot: SavedSlot(display: screen.displayID, cell: cell), frame: grid.frame(cell, size))
+                target = slot
+                outline.show(around: slot.frame)
+            } else {
+                target = nil
+                outline.hide()
+            }
+        }
 
-    func windowDidMove(_ note: Notification) {
-        defaults.set(panel.frame.origin.x, forKey: "originX")
-        defaults.set(panel.frame.origin.y, forKey: "originY")
+        follow()
+        while let next = panel.nextEvent(matching: [.leftMouseUp, .leftMouseDragged]), next.type == .leftMouseDragged { follow() }
+        outline.hide()
+        dragging = false
+        if let target { savedSlot = target.slot }
+        move(to: target?.frame ?? home)
+        if screensChangedWhileDragging {
+            screensChangedWhileDragging = false
+            screensChanged()
+        }
     }
 
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
-        let top = NSMenuItem(title: "Keep on Top", action: #selector(toggleTop), keyEquivalent: "")
-        top.target = self
-        top.state = keepOnTop ? .on : .off
-        menu.addItem(top)
+        menu.addItem(.sectionHeader(title: "Size"))
+        for option in WidgetSize.allCases {
+            let item = NSMenuItem(title: option.title, action: #selector(chooseSize), keyEquivalent: "")
+            item.target = self
+            item.representedObject = option.rawValue
+            item.state = option == size ? .on : .off
+            menu.addItem(item)
+        }
+        menu.addItem(.separator())
+        let remove = NSMenuItem(title: "Remove Widget", action: #selector(removeWidget), keyEquivalent: "")
+        remove.target = self
+        menu.addItem(remove)
+        menu.addItem(.separator())
         let login = NSMenuItem(title: "Open at Login", action: #selector(toggleLogin), keyEquivalent: "")
         login.target = self
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(login)
-        menu.addItem(.separator())
-        let quit = NSMenuItem(title: "Quit Claude Agents", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
-        menu.addItem(quit)
         return menu
     }
 
-    @objc private func toggleTop() {
-        keepOnTop.toggle()
-        applyLevel()
-        panel.orderFrontRegardless()
+    @objc private func chooseSize(_ item: NSMenuItem) {
+        guard let next = (item.representedObject as? String).flatMap(WidgetSize.init(rawValue:)), next != size else { return }
+        realWidgets = realWidgetFrames()
+        let target = placement(for: next)
+        guard target.free else { return }
+        size = next
+        defaults.set(next.rawValue, forKey: "size")
+        savedSlot = target.slot
+        host.resize(to: next)
+        move(to: target.frame)
+    }
+
+    @objc private func removeWidget() {
+        try? SMAppService.mainApp.unregister()
+        NSApp.terminate(nil)
     }
 
     @objc private func toggleLogin() {
