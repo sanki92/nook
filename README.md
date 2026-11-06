@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/license-MIT-444" alt="MIT license">
 </p>
 
-<p align="center"><img src="docs/media/hero.gif" width="720" alt="Nook showing four Claude Code sessions"></p>
+<p align="center"><img src="docs/media/hero.gif" width="704" alt="Nook at Extra Large, showing four Claude Code sessions"></p>
 
 ## Get it
 
@@ -35,7 +35,7 @@ Every session gets its own little mascot, acting out whatever it's doing right n
 
 ## Feels like a real widget
 
-<img align="right" src="docs/media/medium.gif" width="276" alt="Nook at Medium size">
+<img align="right" src="docs/media/medium.gif" width="300" alt="Nook at Medium size">
 
 - Snaps into the same grid as Apple's widgets, on any screen
 - Right-click for **Medium**, **Large** or **Extra Large**
@@ -48,13 +48,11 @@ Every session gets its own little mascot, acting out whatever it's doing right n
 
 It hangs out in your menu bar too, showing whichever session matters most.
 
-<img src="docs/media/menubar.png" width="410" alt="Nook in the menu bar">
-
 ## Private by design
 
 Nook only reads the files Claude Code already keeps on your Mac. No account, no API key, and nothing ever leaves your machine.
 
-<p align="center"><img src="docs/media/campfire.gif" width="368" alt="The crew camping out"><br><sub>Nothing running? The crew camps out.</sub></p>
+<p align="center"><img src="docs/media/campfire.gif" width="344" alt="The crew camping out"><br><sub>Nothing running? The crew camps out.</sub></p>
 
 <details>
 <summary><b>Build from source</b></summary>
