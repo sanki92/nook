@@ -31,23 +31,7 @@ Rather click? Grab **Nook.zip** from [Releases](https://github.com/sanki92/nook/
 
 Every session gets its own little mascot, acting out whatever it's doing right now.
 
-<table>
-  <tr>
-    <td align="center"><img src="docs/media/state-cooking.gif" width="230" alt=""><br><b>Cooking</b><br><sub>running a command</sub></td>
-    <td align="center"><img src="docs/media/state-building.gif" width="230" alt=""><br><b>Building</b><br><sub>writing code</sub></td>
-    <td align="center"><img src="docs/media/state-reading.gif" width="230" alt=""><br><b>Reading</b><br><sub>digging through files</sub></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="docs/media/state-gate.gif" width="230" alt=""><br><b>Needs you</b><br><sub>waiting on your OK</sub></td>
-    <td align="center"><img src="docs/media/state-thinking.gif" width="230" alt=""><br><b>Thinking</b><br><sub>figuring out what's next</sub></td>
-    <td align="center"><img src="docs/media/state-delegating.gif" width="230" alt=""><br><b>Delegating</b><br><sub>its helpers are on it</sub></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="docs/media/state-done.gif" width="230" alt=""><br><b>Done</b><br><sub>job finished</sub></td>
-    <td align="center"><img src="docs/media/state-sleeping.gif" width="230" alt=""><br><b>Resting</b><br><sub>quiet for a while</sub></td>
-    <td align="center"><img src="docs/media/state-error.gif" width="230" alt=""><br><b>Hit a snag</b><br><sub>something went wrong</sub></td>
-  </tr>
-</table>
+<p align="center"><img src="docs/media/crew.gif" width="820" alt="The nine moods: Cooking, Building, Reading, Needs you, Thinking, Delegating, Done, Resting and Hit a snag"></p>
 
 ## Feels like a real widget
 
