@@ -35,7 +35,7 @@ final class StatusMascot: NSObject, NSMenuDelegate {
         if agents.isEmpty { menu.addItem(withTitle: "No agents running", action: nil, keyEquivalent: "") }
         for agent in agents {
             let name = agent.name.count > 40 ? agent.name.prefix(39) + "…" : Substring(agent.name)
-            let entry = NSMenuItem(title: "\(name) — \(stateWords[agent.state]!)", action: #selector(open), keyEquivalent: "")
+            let entry = NSMenuItem(title: "\(name) · \(stateWords[agent.state]!)", action: #selector(open), keyEquivalent: "")
             entry.target = self
             entry.tag = Int(agent.pid)
             menu.addItem(entry)
