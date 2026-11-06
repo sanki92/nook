@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 main() {
-  local repo="${NOOK_REPO:-https://github.com/GITHUB_USER/nook.git}"
+  local repo="${NOOK_REPO:-https://github.com/sanki92/nook.git}"
 
   if [[ "$(uname)" != "Darwin" ]]; then
     echo "Nook runs on macOS only."
@@ -26,7 +26,7 @@ main() {
 
   work="$(mktemp -d)"
   trap 'rm -rf "$work"' EXIT
-  trap 'echo; echo "Nook could not be installed. You can download it instead: https://github.com/GITHUB_USER/nook/releases/latest"' ERR
+  trap 'echo; echo "Nook could not be installed. You can download it instead: https://github.com/sanki92/nook/releases/latest"' ERR
 
   echo "Downloading Nook..."
   GIT_TERMINAL_PROMPT=0 git clone --quiet --depth 1 "$repo" "$work/nook"

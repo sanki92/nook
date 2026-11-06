@@ -33,7 +33,7 @@ You need macOS 14 Sonoma or later and [Claude Code](https://claude.com/claude-co
 Paste this into Terminal:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/GITHUB_USER/nook/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sanki92/nook/main/install.sh | bash
 ```
 
 It builds Nook on your Mac and opens it.
@@ -43,7 +43,7 @@ It builds Nook on your Mac and opens it.
 
 ### Option 2: Download
 
-1. Download `Nook.zip` from the [latest release](https://github.com/GITHUB_USER/nook/releases/latest).
+1. Download `Nook.zip` from the [latest release](https://github.com/sanki92/nook/releases/latest).
 2. Unzip it, then drag **Nook** into your **Applications** folder.
 3. Open Nook. macOS blocks it the first time, because Nook isn't signed with a paid Apple developer account.
 4. Open **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to Nook, then confirm.
@@ -68,7 +68,7 @@ Nook only reads the session files Claude Code already keeps in `~/.claude` on yo
 ## Build from source
 
 ```bash
-git clone https://github.com/GITHUB_USER/nook.git
+git clone https://github.com/sanki92/nook.git
 cd nook
 ./build.sh --check
 ./build.sh --install
