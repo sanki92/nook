@@ -434,6 +434,8 @@ extension Pen {
             px(Palette.wood, x + 11, top + (up ? -2 : 1), 1, 3); px(Palette.iron, x + 10, top + (up ? -3 : 0), 3, 1)
         case .reading:
             px(hex("#7E4B9E"), x - 1, top + 3, 12, 4); px(Palette.white, x, top + 4, 10, 2); px(Palette.shade, x + 5, top + 4, 1, 2)
+        case .gate, .done, .sleeping, .error:
+            break
         default:
             let on = (f + i * 4) / 4 % 3
             for k in 0..<3 { px(k == on ? hex("#FFFFFF") : rgba(255, 255, 255, 0.35), x + 2 + k * 3, top - 3) }

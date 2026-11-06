@@ -82,3 +82,13 @@ func shouldRemember(_ resolved: SavedSlot, saved: SavedSlot?, displays: [Display
     guard let saved else { return true }
     return resolved != saved && displays.contains { $0.id == saved.display }
 }
+
+func stepAside(current: SavedSlot, size: WidgetSize, displays: [Display], taken: [CGRect]) -> SavedSlot? {
+    guard let display = displays.first(where: { $0.id == current.display }) else { return nil }
+    let grid = display.grid
+    let block = grid.area(current.cell, size).insetBy(dx: 1, dy: 1)
+    guard taken.contains(where: { $0.intersects(block) }) else { return nil }
+    let rect = grid.frame(current.cell, size)
+    guard let cell = grid.nearestFree(toTopLeft: CGPoint(x: rect.minX, y: rect.maxY), size, taken: taken), cell != current.cell else { return nil }
+    return SavedSlot(display: display.id, cell: cell)
+}

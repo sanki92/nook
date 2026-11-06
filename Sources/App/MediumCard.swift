@@ -1,7 +1,7 @@
 import AppKit
 import QuartzCore
 
-private let word: [AgentState: String] = [
+let stateWords: [AgentState: String] = [
     .gate: "Needs you", .cooking: "Cooking", .building: "Building", .reading: "Reading",
     .thinking: "Thinking", .delegating: "Delegating", .done: "Done", .sleeping: "Resting", .error: "Hit a snag",
 ]
@@ -62,9 +62,9 @@ final class MediumCard: NSView {
         rail.frame = bounds
         tint.frame = bounds
         canvas.frame = CGRect(x: bounds.width - 12 - 172, y: 6, width: 172, height: 100)
-        crew.layer.frame = CGRect(origin: CGPoint(x: bounds.width - 24 - CrewCanvas.size.width, y: bounds.height - 8 - CrewCanvas.size.height), size: CrewCanvas.size)
+        crew.show(shown?.helpers ?? [], room: bounds.width - 30, rightEdge: bounds.width - 24, bottom: bounds.height - 36)
         let nameHeight = name.intrinsicContentSize.height
-        name.frame = CGRect(x: 16, y: bounds.height - 12 - nameHeight, width: bounds.width - 56 - CGFloat(min(crew.jobs.count, 3) * 26), height: nameHeight)
+        name.frame = CGRect(x: 16, y: bounds.height - 12 - nameHeight, width: bounds.width - 56 - crew.width, height: nameHeight)
         stateWord.frame = CGRect(x: 16, y: 12, width: bounds.width - 32, height: stateWord.intrinsicContentSize.height)
         let top = (bounds.height + CGFloat(dots.count) * 9 - 4) / 2
         for (i, dot) in dots.enumerated() {
@@ -151,8 +151,7 @@ final class MediumCard: NSView {
         tint.fade(faded: faded, gate: agent.state == .gate, animated: previous?.id == agent.id)
         if (previous?.state == .gate) != (agent.state == .gate) { layer?.setPulse(agent.state == .gate) }
         name.stringValue = agent.name
-        crew.jobs = agent.helpers
-        stateWord.attributedStringValue = NSAttributedString(string: word[agent.state]!, attributes: [
+        stateWord.attributedStringValue = NSAttributedString(string: stateWords[agent.state]!, attributes: [
             .font: NSFont.systemFont(ofSize: 26, weight: .bold), .foregroundColor: NSColor.white, .kern: -0.65,
         ])
         showDots(current: index)

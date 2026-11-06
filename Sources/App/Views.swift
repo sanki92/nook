@@ -83,31 +83,55 @@ extension CALayer {
 }
 
 final class CrewCanvas {
-    static let size = CGSize(width: 82, height: 28)
     let layer = CALayer()
+    private let art = CALayer()
+    private let count = CATextLayer()
     private let context = pixelContext(width: 41, height: 14)
-    var jobs: [AgentState] = [] {
-        didSet {
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            layer.isHidden = jobs.isEmpty
-            CATransaction.commit()
-        }
-    }
+    private var jobs: [AgentState] = []
+    private(set) var width: CGFloat = 0
 
     init() {
-        layer.magnificationFilter = .nearest
-        layer.minificationFilter = .nearest
+        art.magnificationFilter = .nearest
+        art.minificationFilter = .nearest
+        count.font = NSFont.systemFont(ofSize: 11, weight: .bold)
+        count.fontSize = 11
+        count.foregroundColor = rgba(255, 255, 255, 0.85)
+        count.contentsScale = 2
+        count.shadowOpacity = 0.4
+        count.shadowOffset = CGSize(width: 0, height: -1)
+        count.shadowRadius = 1.5
+        layer.addSublayer(art)
+        layer.addSublayer(count)
         layer.isHidden = true
     }
 
+    func show(_ helpers: [AgentState], room: CGFloat, rightEdge: CGFloat, bottom: CGFloat) {
+        let fit = crewFit(count: helpers.count, width: room)
+        jobs = Array(helpers.prefix(fit.minis))
+        let minisWidth = CGFloat(fit.minis * 26), countWidth: CGFloat = fit.extra > 0 ? 26 : 0
+        width = helpers.isEmpty ? 0 : minisWidth + countWidth + 6
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.isHidden = helpers.isEmpty
+        layer.frame = CGRect(x: rightEdge - minisWidth - countWidth, y: bottom, width: minisWidth + countWidth, height: 28)
+        art.frame = CGRect(x: minisWidth - 82, y: 0, width: 82, height: 28)
+        count.isHidden = fit.extra == 0
+        count.string = "+\(fit.extra)"
+        count.frame = CGRect(x: minisWidth + 2, y: 6, width: 24, height: 14)
+        CATransaction.commit()
+        render(frame: 0)
+    }
+
     func render(frame: Int) {
-        guard !jobs.isEmpty, let g = context else { return }
+        guard !jobs.isEmpty, let g = context else {
+            art.contents = nil
+            return
+        }
         g.clear(CGRect(x: 0, y: 0, width: 41, height: 14))
         Pen(g: g).crew(jobs, frame: frame)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        layer.contents = g.makeImage()
+        art.contents = g.makeImage()
         CATransaction.commit()
     }
 }
@@ -120,7 +144,6 @@ final class TileView: NSView {
     private let label = NSTextField(labelWithString: "")
     private let moreBadge = NSTextField(labelWithString: "")
     private let crew = CrewCanvas()
-    private let crewCount = NSTextField(labelWithString: "")
     private var context: CGContext?
     private var geometry = TileGeometry(pixel: 2, compact: false, canvasWidth: 1, canvasHeight: 1, offsetX: 0, offsetY: 0, nameFontSize: 14, nameBottom: 7)
     private var content = Content.noAgents
@@ -155,15 +178,6 @@ final class TileView: NSView {
         label.cell?.truncatesLastVisibleLine = true
         addSubview(label)
 
-        crewCount.font = .systemFont(ofSize: 11, weight: .bold)
-        crewCount.textColor = NSColor.white.withAlphaComponent(0.85)
-        let countShadow = NSShadow()
-        countShadow.shadowColor = NSColor.black.withAlphaComponent(0.4)
-        countShadow.shadowOffset = NSSize(width: 0, height: -1)
-        countShadow.shadowBlurRadius = 3
-        crewCount.shadow = countShadow
-        addSubview(crewCount)
-
         moreBadge.font = .systemFont(ofSize: 10.5, weight: .bold)
         moreBadge.textColor = .white
         moreBadge.drawsBackground = true
@@ -197,9 +211,8 @@ final class TileView: NSView {
         CATransaction.setDisableActions(true)
         let canvasSize = CGSize(width: geo.canvasWidth * geo.pixel, height: geo.canvasHeight * geo.pixel)
         canvas.frame = CGRect(x: (size.width - canvasSize.width) / 2, y: size.height - canvasSize.height, width: canvasSize.width, height: canvasSize.height)
-        crew.jobs = helpers
-        crew.layer.frame = CGRect(origin: CGPoint(x: size.width - (helpers.count > 3 ? 36 : 10) - CrewCanvas.size.width, y: geo.nameBottom - 2), size: CrewCanvas.size)
         CATransaction.commit()
+        crew.show(helpers, room: size.width, rightEdge: size.width - 10, bottom: geo.nameBottom - 2)
 
         let state: AgentState
         if case .agent(let s) = content { state = s } else { state = .sleeping }
@@ -209,15 +222,7 @@ final class TileView: NSView {
         label.stringValue = name
         label.font = .systemFont(ofSize: geo.nameFontSize, weight: .bold)
         let lineHeight = ceil(geo.nameFontSize * 1.3)
-        let crewWidth = helpers.isEmpty ? 0 : CGFloat(min(helpers.count, 3) * 26 + (helpers.count > 3 ? 26 : 0) + 6)
-        label.frame = CGRect(x: 13, y: geo.nameBottom, width: max(0, size.width - 26 - crewWidth), height: lineHeight)
-
-        crewCount.isHidden = helpers.count <= 3
-        if helpers.count > 3 {
-            crewCount.stringValue = "+\(helpers.count - 3)"
-            crewCount.sizeToFit()
-            crewCount.frame.origin = CGPoint(x: size.width - 12 - crewCount.frame.width, y: geo.nameBottom + 4)
-        }
+        label.frame = CGRect(x: 13, y: geo.nameBottom, width: max(0, size.width - 26 - crew.width), height: lineHeight)
 
         moreBadge.isHidden = extra == 0
         if extra > 0 {

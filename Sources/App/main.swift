@@ -55,7 +55,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var realWidgets: [CGRect] = []
     private var currentSlot: SavedSlot?
     private var dragging = false
+    private var moving = false
     private var screensChangedWhileDragging = false
+    private var status: StatusMascot!
+    private var watchTimer: Timer?
+    private var frameCount = 0
 
     func applicationDidFinishLaunching(_ note: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -89,6 +93,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if launch.free && launch.remember { savedSlot = launch.slot }
         panel.orderFrontRegardless()
 
+        status = StatusMascot()
+        status.onOpen = { pid in owningApp(of: pid)?.activate() }
+
         fade(for: NSWorkspace.shared.frontmostApplication)
         refresh(animated: false)
         let poll = Timer(timeInterval: 1, repeats: true) { [weak self] _ in self?.refresh(animated: true) }
@@ -101,24 +108,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         RunLoop.main.add(frames, forMode: .common)
         frameTimer = frames
 
+        let watch = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in self?.watchRealWidgets() }
+        watch.tolerance = 0.05
+        RunLoop.main.add(watch, forMode: .common)
+        watchTimer = watch
+
         NotificationCenter.default.addObserver(self, selector: #selector(screensChanged), name: NSApplication.didChangeScreenParametersNotification, object: nil)
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(appActivated), name: NSWorkspace.didActivateApplicationNotification, object: nil)
     }
 
     private func tick() {
+        frameCount += 1
+        if frameCount % 2 == 0 { status.render(frame: frameCount / 2) }
         guard panel.occlusionState.contains(.visible) else { return }
         host.tick()
     }
 
+    private func watchRealWidgets() {
+        guard !dragging, !moving, let current = currentSlot else { return }
+        let taken = realWidgetFrames()
+        let displays = currentDisplays()
+        guard let next = stepAside(current: current, size: size, displays: displays, taken: taken),
+              let grid = displays.first(where: { $0.id == next.display })?.grid else { return }
+        realWidgets = taken
+        currentSlot = next
+        savedSlot = next
+        move(to: grid.frame(next.cell, size))
+    }
+
     private func refresh(animated: Bool) {
         if let demoCount {
-            host.update(agents: sampleAgents(demoCount), animated: animated)
+            let agents = sampleAgents(demoCount)
+            host.update(agents: agents, animated: animated)
+            status.update(agents: agents)
             return
         }
         poller.async { [weak self] in
             guard let self else { return }
             let agents = self.store.snapshot()
-            DispatchQueue.main.async { self.host.update(agents: agents, animated: animated) }
+            DispatchQueue.main.async {
+                self.host.update(agents: agents, animated: animated)
+                self.status.update(agents: agents)
+            }
         }
     }
 
@@ -170,11 +201,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func move(to frame: CGRect) {
-        NSAnimationContext.runAnimationGroup { ctx in
+        moving = true
+        NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.34
             ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.25, 1)
             panel.animator().setFrame(frame, display: true)
-        }
+        }, completionHandler: { [weak self] in self?.moving = false })
     }
 
     @objc private func screensChanged() {

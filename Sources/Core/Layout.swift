@@ -121,3 +121,13 @@ func tileGeometry(size: CGSize) -> TileGeometry {
         nameFontSize: compact ? 12.5 : (tall ? 19 : 14),
         nameBottom: compact ? 7 : (tall ? 14 : 7))
 }
+
+func crewFit(count: Int, width: CGFloat) -> (minis: Int, extra: Int) {
+    guard count > 0 else { return (0, 0) }
+    let room = width - 86
+    for minis in stride(from: min(count, 3), through: 0, by: -1) {
+        let extra = count - minis
+        if CGFloat(minis * 26 + (extra > 0 ? 26 : 0) + 6) <= room { return (minis, extra) }
+    }
+    return (0, count)
+}
