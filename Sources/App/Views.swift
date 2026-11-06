@@ -3,7 +3,7 @@ import QuartzCore
 
 private let tileColors: [AgentState: (String, String)] = [
     .thinking: ("#232A58", "#31386E"),
-    .delegating: ("#232A58", "#31386E"),
+    .delegating: ("#2B2350", "#46377A"),
     .cooking: ("#2A1B18", "#5A2B1A"),
     .building: ("#262A33", "#454B58"),
     .reading: ("#14303C", "#1F4F5E"),
@@ -82,6 +82,36 @@ extension CALayer {
     }
 }
 
+final class CrewCanvas {
+    static let size = CGSize(width: 82, height: 28)
+    let layer = CALayer()
+    private let context = pixelContext(width: 41, height: 14)
+    var jobs: [AgentState] = [] {
+        didSet {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            layer.isHidden = jobs.isEmpty
+            CATransaction.commit()
+        }
+    }
+
+    init() {
+        layer.magnificationFilter = .nearest
+        layer.minificationFilter = .nearest
+        layer.isHidden = true
+    }
+
+    func render(frame: Int) {
+        guard !jobs.isEmpty, let g = context else { return }
+        g.clear(CGRect(x: 0, y: 0, width: 41, height: 14))
+        Pen(g: g).crew(jobs, frame: frame)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.contents = g.makeImage()
+        CATransaction.commit()
+    }
+}
+
 final class TileView: NSView {
     enum Content: Equatable { case agent(AgentState), noAgents }
 
@@ -89,6 +119,8 @@ final class TileView: NSView {
     private let tint = CAGradientLayer()
     private let label = NSTextField(labelWithString: "")
     private let moreBadge = NSTextField(labelWithString: "")
+    private let crew = CrewCanvas()
+    private let crewCount = NSTextField(labelWithString: "")
     private var context: CGContext?
     private var geometry = TileGeometry(pixel: 2, compact: false, canvasWidth: 1, canvasHeight: 1, offsetX: 0, offsetY: 0, nameFontSize: 14, nameBottom: 7)
     private var content = Content.noAgents
@@ -110,6 +142,7 @@ final class TileView: NSView {
         canvas.magnificationFilter = .nearest
         canvas.minificationFilter = .nearest
         root.addSublayer(canvas)
+        root.addSublayer(crew.layer)
 
         label.textColor = .white
         let nameShadow = NSShadow()
@@ -121,6 +154,15 @@ final class TileView: NSView {
         label.maximumNumberOfLines = 1
         label.cell?.truncatesLastVisibleLine = true
         addSubview(label)
+
+        crewCount.font = .systemFont(ofSize: 11, weight: .bold)
+        crewCount.textColor = NSColor.white.withAlphaComponent(0.85)
+        let countShadow = NSShadow()
+        countShadow.shadowColor = NSColor.black.withAlphaComponent(0.4)
+        countShadow.shadowOffset = NSSize(width: 0, height: -1)
+        countShadow.shadowBlurRadius = 3
+        crewCount.shadow = countShadow
+        addSubview(crewCount)
 
         moreBadge.font = .systemFont(ofSize: 10.5, weight: .bold)
         moreBadge.textColor = .white
@@ -135,7 +177,7 @@ final class TileView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("not used") }
 
-    func configure(content: Content, name: String, pid: Int32?, size: CGSize, cornerRadius: CGFloat, campfirePixel: Int, extra: Int) {
+    func configure(content: Content, name: String, pid: Int32?, size: CGSize, cornerRadius: CGFloat, campfirePixel: Int, extra: Int, helpers: [AgentState]) {
         self.pid = pid
         var geo = tileGeometry(size: size)
         if content == .noAgents {
@@ -155,6 +197,8 @@ final class TileView: NSView {
         CATransaction.setDisableActions(true)
         let canvasSize = CGSize(width: geo.canvasWidth * geo.pixel, height: geo.canvasHeight * geo.pixel)
         canvas.frame = CGRect(x: (size.width - canvasSize.width) / 2, y: size.height - canvasSize.height, width: canvasSize.width, height: canvasSize.height)
+        crew.jobs = helpers
+        crew.layer.frame = CGRect(origin: CGPoint(x: size.width - (helpers.count > 3 ? 36 : 10) - CrewCanvas.size.width, y: geo.nameBottom - 2), size: CrewCanvas.size)
         CATransaction.commit()
 
         let state: AgentState
@@ -165,7 +209,15 @@ final class TileView: NSView {
         label.stringValue = name
         label.font = .systemFont(ofSize: geo.nameFontSize, weight: .bold)
         let lineHeight = ceil(geo.nameFontSize * 1.3)
-        label.frame = CGRect(x: 13, y: geo.nameBottom, width: size.width - 26, height: lineHeight)
+        let crewWidth = helpers.isEmpty ? 0 : CGFloat(min(helpers.count, 3) * 26 + (helpers.count > 3 ? 26 : 0) + 6)
+        label.frame = CGRect(x: 13, y: geo.nameBottom, width: max(0, size.width - 26 - crewWidth), height: lineHeight)
+
+        crewCount.isHidden = helpers.count <= 3
+        if helpers.count > 3 {
+            crewCount.stringValue = "+\(helpers.count - 3)"
+            crewCount.sizeToFit()
+            crewCount.frame.origin = CGPoint(x: size.width - 12 - crewCount.frame.width, y: geo.nameBottom + 4)
+        }
 
         moreBadge.isHidden = extra == 0
         if extra > 0 {
@@ -196,6 +248,7 @@ final class TileView: NSView {
         CATransaction.setDisableActions(true)
         canvas.contents = g.makeImage()
         CATransaction.commit()
+        crew.render(frame: f)
     }
 }
 
@@ -311,7 +364,7 @@ final class BoardView: NSView {
 
         var ids: [String] = []
         var work: [(TileView, CGRect, Bool)] = []
-        func place(id: String, content: TileView.Content, name: String, pid: Int32?, rect: CGRect, extra: Int) {
+        func place(id: String, content: TileView.Content, name: String, pid: Int32?, rect: CGRect, extra: Int, helpers: [AgentState]) {
             ids.append(id)
             let target = flipped(rect)
             var isNew = false
@@ -326,16 +379,16 @@ final class BoardView: NSView {
                 addSubview(tile)
                 isNew = true
             }
-            tile.configure(content: content, name: name, pid: pid, size: target.size, cornerRadius: cornerRadius, campfirePixel: campfirePixel, extra: extra)
+            tile.configure(content: content, name: name, pid: pid, size: target.size, cornerRadius: cornerRadius, campfirePixel: campfirePixel, extra: extra, helpers: helpers)
             tile.setFaded(faded, animated: !isNew)
             work.append((tile, target, isNew))
         }
 
         if visible.isEmpty {
-            place(id: noAgentsID, content: .noAgents, name: "No agents running", pid: nil, rect: rects[0], extra: 0)
+            place(id: noAgentsID, content: .noAgents, name: "No agents running", pid: nil, rect: rects[0], extra: 0, helpers: [])
         } else {
             for (i, agent) in visible.enumerated() {
-                place(id: agent.id, content: .agent(agent.state), name: agent.name, pid: agent.pid, rect: rects[i], extra: i == visible.count - 1 ? extra : 0)
+                place(id: agent.id, content: .agent(agent.state), name: agent.name, pid: agent.pid, rect: rects[i], extra: i == visible.count - 1 ? extra : 0, helpers: agent.helpers)
             }
         }
 

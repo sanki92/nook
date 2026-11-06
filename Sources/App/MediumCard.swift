@@ -3,7 +3,7 @@ import QuartzCore
 
 private let word: [AgentState: String] = [
     .gate: "Needs you", .cooking: "Cooking", .building: "Building", .reading: "Reading",
-    .thinking: "Thinking", .delegating: "Thinking", .done: "Done", .sleeping: "Resting", .error: "Hit a snag",
+    .thinking: "Thinking", .delegating: "Delegating", .done: "Done", .sleeping: "Resting", .error: "Hit a snag",
 ]
 
 final class MediumCard: NSView {
@@ -11,6 +11,7 @@ final class MediumCard: NSView {
     private let rail = NSView()
     private let tint = CAGradientLayer()
     private let canvas = CALayer()
+    private let crew = CrewCanvas()
     private let name = NSTextField(labelWithString: "")
     private let stateWord = NSTextField(labelWithString: "")
     private let context = pixelContext(width: 86, height: 50)
@@ -37,6 +38,7 @@ final class MediumCard: NSView {
         canvas.magnificationFilter = .nearest
         canvas.minificationFilter = .nearest
         face.layer?.addSublayer(canvas)
+        face.layer?.addSublayer(crew.layer)
 
         name.font = .systemFont(ofSize: 14, weight: .bold)
         name.textColor = .white
@@ -60,8 +62,9 @@ final class MediumCard: NSView {
         rail.frame = bounds
         tint.frame = bounds
         canvas.frame = CGRect(x: bounds.width - 12 - 172, y: 6, width: 172, height: 100)
+        crew.layer.frame = CGRect(origin: CGPoint(x: bounds.width - 24 - CrewCanvas.size.width, y: bounds.height - 8 - CrewCanvas.size.height), size: CrewCanvas.size)
         let nameHeight = name.intrinsicContentSize.height
-        name.frame = CGRect(x: 16, y: bounds.height - 12 - nameHeight, width: bounds.width - 56, height: nameHeight)
+        name.frame = CGRect(x: 16, y: bounds.height - 12 - nameHeight, width: bounds.width - 56 - CGFloat(min(crew.jobs.count, 3) * 26), height: nameHeight)
         stateWord.frame = CGRect(x: 16, y: 12, width: bounds.width - 32, height: stateWord.intrinsicContentSize.height)
         let top = (bounds.height + CGFloat(dots.count) * 9 - 4) / 2
         for (i, dot) in dots.enumerated() {
@@ -117,12 +120,14 @@ final class MediumCard: NSView {
 
     func render(frame: Int) {
         guard let shown, let g = context else { return }
+        let f = frame + phase(for: shown.id)
         g.clear(CGRect(x: 0, y: 0, width: 86, height: 50))
-        Pen(g: g).draw(shown.state, frame: frame + phase(for: shown.id))
+        Pen(g: g).draw(shown.state, frame: f)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         canvas.contents = g.makeImage()
         CATransaction.commit()
+        crew.render(frame: f)
     }
 
     private func show(_ index: Int, slide direction: Int) {
@@ -146,6 +151,7 @@ final class MediumCard: NSView {
         tint.fade(faded: faded, gate: agent.state == .gate, animated: previous?.id == agent.id)
         if (previous?.state == .gate) != (agent.state == .gate) { layer?.setPulse(agent.state == .gate) }
         name.stringValue = agent.name
+        crew.jobs = agent.helpers
         stateWord.attributedStringValue = NSAttributedString(string: word[agent.state]!, attributes: [
             .font: NSFont.systemFont(ofSize: 26, weight: .bold), .foregroundColor: NSColor.white, .kern: -0.65,
         ])

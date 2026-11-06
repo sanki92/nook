@@ -146,7 +146,8 @@ private func blink(_ f: Int) -> Bool { f % 41 < 2 }
 extension Pen {
     func draw(_ state: AgentState, frame f: Int) {
         switch state {
-        case .thinking, .delegating: thinking(f)
+        case .thinking: thinking(f)
+        case .delegating: delegating(f)
         case .cooking: cooking(f)
         case .building: building(f)
         case .reading: reading(f)
@@ -166,6 +167,25 @@ extension Pen {
             let on = (f / 4) % 4 == i
             px(on ? hex("#5866D6") : hex("#C9CCE0"), 59 + i * 6, on ? 10 : 11, 4, 4)
         }
+    }
+
+    private func clipboardHolder(_ x: Int, _ f: Int) -> Int {
+        mascot(x, MascotPose(left: .at(-2, 9), right: .at(19, 9), eyes: blink(f) ? .blink : .open, look: (f / 18) % 2 == 1 ? 0 : -1, eyeY: blink(f) ? 4 : 3, eyeH: 3))
+    }
+
+    private func clipboard(_ x: Int, _ y: Int, _ w: Int, _ h: Int, rows: Int, frame f: Int) {
+        px(hex("#8A6241"), x, y, w, h); px(Palette.white, x + 1, y + 1, w - 2, h - 2); px(hex("#5A3F2F"), x + (w - 4) / 2, y - 1, 4, 2)
+        let done = (f / 10) % (rows + 1)
+        for r in 0..<rows {
+            px(hex("#9A958A"), x + 5, y + 2 + r * 2, w - 8, 1)
+            if r < done { px(hex("#46D39A"), x + 2, y + 3 + r * 2); px(hex("#46D39A"), x + 3, y + 2 + r * 2) }
+        }
+    }
+
+    private func delegating(_ f: Int) {
+        let x = 30, top = clipboardHolder(x, f), tap = f % 8 < 4 ? 0 : 1
+        clipboard(x + 3, top + 6, 14, 10, rows: 3, frame: f)
+        px(hex("#F2C14E"), x + 22, top + 5 + tap, 1, 5); px(hex("#3A2A1A"), x + 22, top + 10 + tap, 1, 1)
     }
 
     private func cooking(_ f: Int) {
@@ -349,9 +369,11 @@ extension Pen {
     func drawIcon(_ state: AgentState, frame f: Int) {
         let eyes: Eyes = blink(f) ? .blink : .open
         switch state {
-        case .thinking, .delegating:
+        case .thinking:
             let t = mascot(6, MascotPose(eyes: eyes, look: 1, eyeY: 3))
             for i in 0..<3 { px((f / 4) % 3 == i ? hex("#FFFFFF") : rgba(255, 255, 255, 0.35), 11 + i * 4, t - 5, 2, 2) }
+        case .delegating:
+            clipboard(10, clipboardHolder(6, f) + 7, 12, 8, rows: 2, frame: f)
         case .cooking:
             let t = mascot(6, MascotPose(eyes: eyes, look: 1))
             chefHat(6, t)
@@ -388,6 +410,39 @@ extension Pen {
             let a = Double(f) / 3
             pxf(Palette.gold, 15 + cos(a) * 9, Double(t - 3) + sin(a) * 2, 2, 2)
         }
+    }
+}
+
+extension Pen {
+    func mini(_ job: AgentState, x: Int, ground: Int, frame f: Int, index i: Int) {
+        let working = [AgentState.cooking, .building, .reading].contains(job)
+        let hop = working && (f + i * 5) % 12 == 1 ? 1 : 0, top = ground - 8 - hop
+        px(Palette.shadow, x + 1, ground, 8, 1)
+        for (k, l) in [1, 3, 6, 8].enumerated() { px(Palette.dark, x + l, top + 6, 1, hop == 1 && k % 2 == 1 ? 1 : 2) }
+        px(Palette.body, x, top, 10, 6); px(Palette.lite, x, top, 10, 1); px(Palette.dark, x, top + 5, 10, 1)
+        px(Palette.body, x - 1, top + 2, 1, 2); px(Palette.body, x + 10, top + 2, 1, 2)
+        let shut = (f + i * 13) % 37 < 2
+        for e in [2, 7] { px(Palette.eye, x + e, top + (shut ? 3 : 2), 1, shut ? 1 : 2) }
+        switch job {
+        case .cooking:
+            px(Palette.white, x + 2, top - 3, 6, 3); px(Palette.shade, x + 2, top - 1, 6, 1)
+            let s = (f + i * 3) % 8
+            px(rgba(255, 255, 255, 0.5 - Double(s) * 0.06), x + 9, top - 2 - s)
+        case .building:
+            let up = (f + i * 2) % 6 < 3
+            px(hex("#E9B44C"), x + 1, top - 2, 8, 2); px(hex("#C48F2C"), x, top - 1, 10, 1)
+            px(Palette.wood, x + 11, top + (up ? -2 : 1), 1, 3); px(Palette.iron, x + 10, top + (up ? -3 : 0), 3, 1)
+        case .reading:
+            px(hex("#7E4B9E"), x - 1, top + 3, 12, 4); px(Palette.white, x, top + 4, 10, 2); px(Palette.shade, x + 5, top + 4, 1, 2)
+        default:
+            let on = (f + i * 4) / 4 % 3
+            for k in 0..<3 { px(k == on ? hex("#FFFFFF") : rgba(255, 255, 255, 0.35), x + 2 + k * 3, top - 3) }
+        }
+    }
+
+    func crew(_ jobs: [AgentState], frame f: Int) {
+        let shown = jobs.prefix(3)
+        for (i, job) in shown.enumerated() { mini(job, x: 1 + (3 - shown.count + i) * 13, ground: 12, frame: f, index: i) }
     }
 }
 

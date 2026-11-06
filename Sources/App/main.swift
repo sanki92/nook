@@ -10,8 +10,10 @@ private let sampleNames: [(String, AgentState)] = [
 
 private func sampleAgents(_ count: Int) -> [Agent] {
     let forced = argument(after: "--state").flatMap(AgentState.init(rawValue:))
+    let jobs: [AgentState] = [.cooking, .building, .reading, .thinking]
+    let helpers = (0..<(argument(after: "--helpers").flatMap(Int.init) ?? 0)).map { jobs[$0 % jobs.count] }
     return sortedAgents(sampleNames.prefix(count).enumerated().map { i, item in
-        Agent(id: item.0, name: item.0, state: forced ?? item.1, pid: 0, startedAt: Double(i))
+        Agent(id: item.0, name: item.0, state: forced ?? item.1, pid: 0, startedAt: Double(i), helpers: helpers)
     })
 }
 
