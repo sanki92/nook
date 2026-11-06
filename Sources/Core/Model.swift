@@ -1,13 +1,13 @@
 import Foundation
 
 enum AgentState: String {
-    case gate, error, thinking, cooking, building, reading, done, sleeping
+    case gate, error, thinking, cooking, building, reading, delegating, done, sleeping
 
     var rank: Int {
         switch self {
         case .gate: return 0
         case .error: return 1
-        case .thinking, .cooking, .building, .reading: return 2
+        case .thinking, .cooking, .building, .reading, .delegating: return 2
         case .done: return 3
         case .sleeping: return 4
         }
@@ -20,6 +20,7 @@ struct Agent: Equatable {
     let state: AgentState
     let pid: Int32
     let startedAt: Double
+    var helpers: [AgentState] = []
 }
 
 func sortedAgents(_ agents: [Agent]) -> [Agent] {
@@ -64,7 +65,7 @@ func state(for tool: String?) -> AgentState {
     }
 }
 
-func deriveState(status: String?, summary: TranscriptSummary, statusUpdatedAt: Double?, now: Date) -> AgentState {
+func deriveState(status: String?, summary: TranscriptSummary, statusUpdatedAt: Double?, helperCount: Int = 0, now: Date) -> AgentState {
     switch status {
     case "waiting":
         return .gate
@@ -72,6 +73,7 @@ func deriveState(status: String?, summary: TranscriptSummary, statusUpdatedAt: D
         return state(for: summary.lastTool)
     case "idle":
         if summary.failed { return .error }
+        if helperCount > 0 { return .delegating }
         if summary.interrupted || !summary.hasReply { return .sleeping }
         guard let updated = statusUpdatedAt else { return .sleeping }
         return now.timeIntervalSince1970 - updated / 1000 < doneWindow ? .done : .sleeping
@@ -90,7 +92,7 @@ func displayName(record: SessionRecord, aiTitle: String?) -> String {
     return "Claude session"
 }
 
-func summarizeTranscript(tail: Data, startsMidLine: Bool) -> TranscriptSummary {
+func summarizeTranscript(tail: Data, startsMidLine: Bool, includeSidechain: Bool = false) -> TranscriptSummary {
     var summary = TranscriptSummary()
     var lines = tail.split(separator: 0x0A, omittingEmptySubsequences: true)
     if startsMidLine, !lines.isEmpty { lines.removeFirst() }
@@ -98,7 +100,7 @@ func summarizeTranscript(tail: Data, startsMidLine: Bool) -> TranscriptSummary {
     var seenMessage = false
     for line in lines.reversed() {
         guard let entry = (try? JSONSerialization.jsonObject(with: Data(line))) as? [String: Any],
-              (entry["isSidechain"] as? Bool) != true else { continue }
+              includeSidechain || (entry["isSidechain"] as? Bool) != true else { continue }
 
         switch entry["type"] as? String {
         case "assistant":

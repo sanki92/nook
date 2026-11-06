@@ -37,8 +37,8 @@ s = summarizeTranscript(tail: lines(["not json", prompt, reply]), startsMidLine:
 check(s.hasReply, "a corrupt line doesn't break anything")
 
 print("State")
-func derive(_ status: String?, _ summary: TranscriptSummary, _ updated: Double? = nil) -> AgentState {
-    deriveState(status: status, summary: summary, statusUpdatedAt: updated ?? justNow, now: now)
+func derive(_ status: String?, _ summary: TranscriptSummary, _ updated: Double? = nil, helpers: Int = 0) -> AgentState {
+    deriveState(status: status, summary: summary, statusUpdatedAt: updated ?? justNow, helperCount: helpers, now: now)
 }
 check(derive("waiting", TranscriptSummary()) == .gate, "waiting shows the roadblock")
 check(derive("busy", TranscriptSummary()) == .thinking, "busy with no tool is thinking")
@@ -53,6 +53,13 @@ check(derive("idle", TranscriptSummary(hasReply: true, interrupted: true)) == .s
 check(derive("idle", TranscriptSummary(hasReply: true, failed: true)) == .error, "a failed turn shows the error")
 check(derive(nil, TranscriptSummary()) == .sleeping, "a missing status is resting")
 check(derive("something-new", TranscriptSummary()) == .sleeping, "an unknown status is resting")
+check(derive("idle", TranscriptSummary(hasReply: true), nil, helpers: 2) == .delegating, "idle with helpers running is delegating")
+check(derive("idle", TranscriptSummary(hasReply: true, failed: true), nil, helpers: 2) == .error, "a failed turn still shows the error")
+check(derive("busy", TranscriptSummary(lastTool: "Bash"), nil, helpers: 2) == .cooking, "a busy main agent's own work wins over delegating")
+check(derive("waiting", TranscriptSummary(), nil, helpers: 2) == .gate, "waiting still needs you with helpers running")
+check(AgentState.delegating.rank == 2, "delegating counts as working")
+s = summarizeTranscript(tail: lines([#"{"type":"user","isSidechain":true,"message":{"content":"go"}}"#, #"{"type":"assistant","isSidechain":true,"message":{"content":[{"type":"tool_use","name":"Edit"}]}}"#]), startsMidLine: false, includeSidechain: true)
+check(s.lastTool == "Edit", "a helper's own transcript is read even though it is marked sidechain")
 
 print("Names")
 func record(_ json: String) -> SessionRecord { try! JSONDecoder().decode(SessionRecord.self, from: json.data(using: .utf8)!) }
@@ -112,23 +119,45 @@ func writeSession(_ pid: Int32, _ id: String, _ status: String, extra: String = 
 writeSession(1, "alive", "waiting", extra: #","waitingFor":"permission prompt""#)
 writeSession(2, "dead", "busy")
 writeSession(3, "working", "busy")
+writeSession(0, "delegator", "idle")
 try! "not json".write(to: sessions.appendingPathComponent("4.json"), atomically: true, encoding: .utf8)
 try! "secret".write(to: sessions.appendingPathComponent("3.key"), atomically: true, encoding: .utf8)
 try! lines([#"{"type":"ai-title","aiTitle":"Add payments"}"#, prompt, toolCall("Edit")]).write(to: project.appendingPathComponent("working.jsonl"))
+try! lines([prompt, reply]).write(to: project.appendingPathComponent("delegator.jsonl"))
+func writeHelper(_ session: String, _ id: String, tool: String?, meta: String, created: Date? = nil, modified: Date = Date()) {
+    let dir = project.appendingPathComponent("\(session)/subagents")
+    try! FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    let file = dir.appendingPathComponent("agent-\(id).jsonl")
+    let rows = [#"{"type":"user","isSidechain":true,"message":{"content":"go"}}"#] + (tool.map { [#"{"type":"assistant","isSidechain":true,"message":{"content":[{"type":"tool_use","name":"\#($0)"}]}}"#] } ?? [])
+    try! lines(rows).write(to: file)
+    try! meta.write(to: dir.appendingPathComponent("agent-\(id).meta.json"), atomically: true, encoding: .utf8)
+    var attrs: [FileAttributeKey: Any] = [.modificationDate: modified]
+    if let created { attrs[.creationDate] = created }
+    try! FileManager.default.setAttributes(attrs, ofItemAtPath: file.path)
+}
+writeHelper("working", "a", tool: "Bash", meta: #"{"description":"x"}"#, created: Date().addingTimeInterval(-300))
+writeHelper("working", "b", tool: "Read", meta: #"{"description":"y"}"#, created: Date().addingTimeInterval(-200))
+writeHelper("working", "c", tool: "Edit", meta: #"{"finished":true}"#)
+writeHelper("working", "d", tool: "Edit", meta: #"{"description":"z"}"#, modified: Date().addingTimeInterval(-700))
+writeHelper("working", "e", tool: "Edit", meta: "not json")
+writeHelper("delegator", "f", tool: "Bash", meta: #"{"description":"x"}"#)
 var ended: Set<Int32> = [2]
 let store = SessionStore(root: tmp, alive: { !ended.contains($0) })
 let found = store.snapshot()
-check(found.map(\.id) == ["alive", "working"], "dead sessions and unreadable files are left out")
+check(found.map(\.id) == ["alive", "delegator", "working"], "dead sessions and unreadable files are left out")
 check(found.first?.state == .gate, "a waiting session shows the roadblock")
 check(found.last?.state == .building, "the transcript decides the activity")
 check(found.last?.name == "Add payments", "the title comes from the transcript")
 check(found.first?.name == "app-1", "a session with no transcript keeps its own name")
+check(found.last?.helpers == [.cooking, .reading], "running helpers in start order with their jobs; finished, stale and unreadable ones are skipped")
+check(found.first?.helpers == [], "a session without a helpers folder has none")
+check(found.first(where: { $0.id == "delegator" })?.state == .delegating, "an idle session with a running helper is delegating")
 check(SessionStore(root: tmp.appendingPathComponent("missing")).snapshot().isEmpty, "no sessions folder means no agents")
 try! #"{"pid":3,"sessionId":"work"#.write(to: sessions.appendingPathComponent("3.json"), atomically: true, encoding: .utf8)
-check(store.snapshot().map(\.id) == ["alive", "working"], "a session file caught mid-write keeps its agent")
-check(SessionStore(root: tmp, alive: { $0 != 2 }).snapshot().map(\.id) == ["alive"], "a half-written file with no earlier read is left out")
+check(store.snapshot().map(\.id) == ["alive", "delegator", "working"], "a session file caught mid-write keeps its agent")
+check(SessionStore(root: tmp, alive: { $0 != 2 }).snapshot().map(\.id) == ["alive", "delegator"], "a half-written file with no earlier read is left out")
 ended.insert(3)
-check(store.snapshot().map(\.id) == ["alive"], "a half-written file whose process ended is left out")
+check(store.snapshot().map(\.id) == ["alive", "delegator"], "a half-written file whose process ended is left out")
 
 print("Grid")
 let mainGrid = SlotGrid(visibleFrame: CGRect(x: 0, y: 0, width: 1470, height: 923))

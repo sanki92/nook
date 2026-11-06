@@ -3,7 +3,7 @@ import QuartzCore
 
 private let word: [AgentState: String] = [
     .gate: "Needs you", .cooking: "Cooking", .building: "Building", .reading: "Reading",
-    .thinking: "Thinking", .done: "Done", .sleeping: "Resting", .error: "Hit a snag",
+    .thinking: "Thinking", .delegating: "Thinking", .done: "Done", .sleeping: "Resting", .error: "Hit a snag",
 ]
 
 final class MediumCard: NSView {

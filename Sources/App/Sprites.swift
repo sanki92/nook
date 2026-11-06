@@ -146,7 +146,7 @@ private func blink(_ f: Int) -> Bool { f % 41 < 2 }
 extension Pen {
     func draw(_ state: AgentState, frame f: Int) {
         switch state {
-        case .thinking: thinking(f)
+        case .thinking, .delegating: thinking(f)
         case .cooking: cooking(f)
         case .building: building(f)
         case .reading: reading(f)
@@ -349,7 +349,7 @@ extension Pen {
     func drawIcon(_ state: AgentState, frame f: Int) {
         let eyes: Eyes = blink(f) ? .blink : .open
         switch state {
-        case .thinking:
+        case .thinking, .delegating:
             let t = mascot(6, MascotPose(eyes: eyes, look: 1, eyeY: 3))
             for i in 0..<3 { px((f / 4) % 3 == i ? hex("#FFFFFF") : rgba(255, 255, 255, 0.35), 11 + i * 4, t - 5, 2, 2) }
         case .cooking:

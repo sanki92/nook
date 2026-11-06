@@ -3,6 +3,7 @@ import QuartzCore
 
 private let tileColors: [AgentState: (String, String)] = [
     .thinking: ("#232A58", "#31386E"),
+    .delegating: ("#232A58", "#31386E"),
     .cooking: ("#2A1B18", "#5A2B1A"),
     .building: ("#262A33", "#454B58"),
     .reading: ("#14303C", "#1F4F5E"),
