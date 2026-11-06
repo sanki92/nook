@@ -226,6 +226,7 @@ _ = fresh.current(in: oneWaiting)
 let later = [agent("b", .reading, 2), agent("a", .cooking, 1)]
 check(fresh.current(in: later) == 0, "with no swipe it returns to whatever is first")
 
+check(derive("idle", TranscriptSummary(hasReply: true, interrupted: true), nil, helpers: 1) == .delegating, "an interrupted turn with helpers still running is delegating")
 print("Crew and step aside")
 check(crewFit(count: 0, width: 344) == (0, 0), "no helpers, no crew")
 check(crewFit(count: 2, width: 344) == (2, 0), "two helpers fit on a wide tile")
@@ -236,7 +237,7 @@ let sideMain = Display(id: 1, grid: SlotGrid(visibleFrame: CGRect(x: 0, y: 0, wi
 let sideCalendar = CGRect(x: 8, y: 923 - 8 - 180, width: 180, height: 180)
 check(stepAside(current: SavedSlot(display: 1, cell: Cell(column: 0, row: 1)), size: .large, displays: [sideMain], taken: [sideCalendar]) == nil, "no overlap means no move")
 let landed = stepAside(current: SavedSlot(display: 1, cell: Cell(column: 0, row: 0)), size: .large, displays: [sideMain], taken: [sideCalendar])
-check(landed != nil && sideMain.grid.isFree(landed!.cell, .large, taken: [sideCalendar]), "an Apple widget landing on ours moves ours to a free slot")
+check(landed != nil && landed!.display == 1 && sideMain.grid.isFree(landed!.cell, .large, taken: [sideCalendar]), "an Apple widget landing on ours moves ours to a free slot")
 let sideTiny = Display(id: 1, grid: SlotGrid(visibleFrame: CGRect(x: 0, y: 0, width: 400, height: 300)), isMain: true)
 check(stepAside(current: SavedSlot(display: 1, cell: Cell(column: 0, row: 0)), size: .extraLarge, displays: [sideTiny], taken: [CGRect(x: 0, y: 0, width: 400, height: 300)]) == nil, "with no free slot it stays put")
 check(stepAside(current: SavedSlot(display: 9, cell: Cell(column: 0, row: 0)), size: .large, displays: [sideMain], taken: [sideCalendar]) == nil, "a missing display does nothing")

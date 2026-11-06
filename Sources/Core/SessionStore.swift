@@ -91,25 +91,23 @@ final class SessionStore {
         guard let transcript else { return [] }
         let dir = transcript.deletingPathExtension().appendingPathComponent("subagents")
         let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
-        var running: [(created: Date, job: AgentState)] = []
+        var running: [(created: Date, path: String, job: AgentState)] = []
         for file in files where file.pathExtension == "jsonl" {
-            let meta = file.deletingPathExtension().appendingPathExtension("meta.json")
-            guard let data = try? Data(contentsOf: meta),
-                  let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-                  (json["finished"] as? Bool) != true,
-                  let attrs = try? FileManager.default.attributesOfItem(atPath: file.path),
+            guard let attrs = try? FileManager.default.attributesOfItem(atPath: file.path),
                   let size = attrs[.size] as? UInt64,
                   let modified = attrs[.modificationDate] as? Date,
-                  now.timeIntervalSince(modified) < 600 else { continue }
+                  now.timeIntervalSince(modified) < 600,
+                  let data = try? Data(contentsOf: file.deletingPathExtension().appendingPathExtension("meta.json")),
+                  let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                  (json["finished"] as? Bool) != true else { continue }
             seen.insert(file.path)
-            var helper = helperCache[file.path]
-            if helper == nil || helper?.size != size || helper?.modified != modified {
-                helper = CachedHelper(size: size, modified: modified, job: state(for: readSummary(url: file, size: size, includeSidechain: true).lastTool))
-                helperCache[file.path] = helper
-            }
-            running.append((attrs[.creationDate] as? Date ?? modified, helper!.job))
+            let cached = helperCache[file.path]
+            let helper = cached.flatMap { $0.size == size && $0.modified == modified ? $0 : nil }
+                ?? CachedHelper(size: size, modified: modified, job: state(for: readSummary(url: file, size: size, includeSidechain: true).lastTool))
+            helperCache[file.path] = helper
+            running.append((attrs[.creationDate] as? Date ?? modified, file.path, helper.job))
         }
-        return running.sorted { $0.created < $1.created }.map(\.job)
+        return running.sorted { ($0.created, $0.path) < ($1.created, $1.path) }.map(\.job)
     }
 
     private func readSummary(url: URL, size: UInt64, includeSidechain: Bool = false) -> TranscriptSummary {

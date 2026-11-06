@@ -4,6 +4,7 @@ final class StatusMascot: NSObject, NSMenuDelegate {
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let context = pixelContext(width: 64, height: 44)
     private var agents: [Agent] = []
+    private var lastFrame = Data()
     var onOpen: ((Int32) -> Void)?
 
     override init() {
@@ -18,15 +19,18 @@ final class StatusMascot: NSObject, NSMenuDelegate {
 
     func update(agents: [Agent]) {
         self.agents = agents
-        let working = agents.filter { $0.state.rank <= 2 }.count
-        item.button?.title = working > 1 ? "\(working)" : ""
+        let active = agents.filter { $0.state.rank <= 2 }.count
+        item.button?.title = active > 1 ? "\(active)" : ""
     }
 
     func render(frame: Int) {
         guard let g = context else { return }
         g.clear(CGRect(x: 0, y: 0, width: 16, height: 11))
         Pen(g: g, width: 16, height: 11).statusMascot(agents.first?.state, frame: frame)
-        guard let image = g.makeImage() else { return }
+        guard let bytes = g.data else { return }
+        let pixels = Data(bytes: bytes, count: g.bytesPerRow * g.height)
+        guard pixels != lastFrame, let image = g.makeImage() else { return }
+        lastFrame = pixels
         item.button?.image = NSImage(cgImage: image, size: NSSize(width: 32, height: 22))
     }
 
@@ -46,6 +50,7 @@ final class StatusMascot: NSObject, NSMenuDelegate {
     }
 
     @objc private func open(_ sender: NSMenuItem) {
+        guard sender.tag > 0 else { return }
         onOpen?(Int32(sender.tag))
     }
 }

@@ -458,11 +458,7 @@ final class GlassHost: NSView {
             layer?.cornerCurve = .continuous
             layer?.masksToBounds = true
             addSubview(content)
-        } else if #available(macOS 26.0, *) {
-            let glass = NSGlassEffectView(frame: rect)
-            glass.cornerRadius = 26
-            glass.autoresizingMask = [.width, .height]
-            glass.contentView = content
+        } else if let glass = makeGlass(rect, content) {
             addSubview(glass)
         } else {
             let effect = NSVisualEffectView(frame: rect)
@@ -516,4 +512,17 @@ final class GlassHost: NSView {
         card.isHidden = size != .medium || agents.isEmpty
         board.isHidden = !card.isHidden
     }
+}
+
+private func makeGlass(_ rect: NSRect, _ content: NSView) -> NSView? {
+    #if compiler(>=6.2)
+    if #available(macOS 26.0, *) {
+        let glass = NSGlassEffectView(frame: rect)
+        glass.cornerRadius = 26
+        glass.autoresizingMask = [.width, .height]
+        glass.contentView = content
+        return glass
+    }
+    #endif
+    return nil
 }
