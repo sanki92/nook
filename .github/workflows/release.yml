@@ -1,0 +1,19 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./build.sh --check
+      - run: VERSION="${GITHUB_REF_NAME#v}" ./build.sh --zip
+      - run: gh release create "$GITHUB_REF_NAME" build/Nook.zip --title "Nook $GITHUB_REF_NAME" --notes "Download Nook.zip, unzip it and drag Nook into Applications. The first time, open it from System Settings → Privacy & Security → Open Anyway."
+        env:
+          GH_TOKEN: ${{ github.token }}
