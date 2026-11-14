@@ -2,8 +2,9 @@ import AppKit
 
 final class StatusMascot: NSObject, NSMenuDelegate {
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-    private let context = pixelContext(width: 64, height: 44)
+    private let context = pixelContext(width: 256, height: 44)
     private var agents: [Agent] = []
+    private var game: MenuGame?
     private var lastFrame = Data()
     var onOpen: ((Int32) -> Void)?
 
@@ -19,19 +20,28 @@ final class StatusMascot: NSObject, NSMenuDelegate {
 
     func update(agents: [Agent]) {
         self.agents = agents
-        let active = agents.filter { $0.state.rank <= 2 }.count
-        item.button?.title = active > 1 ? "\(active)" : ""
+        game = menuGame(agents)
+        let title = (game?.extra ?? 0) > 0 ? "+\(game!.extra)" : ""
+        if item.button?.title != title { item.button?.title = title }
     }
 
     func render(frame: Int) {
         guard let g = context else { return }
-        g.clear(CGRect(x: 0, y: 0, width: 16, height: 11))
-        Pen(g: g, width: 16, height: 11).statusMascot(agents.first?.state, frame: frame)
+        g.clear(CGRect(x: 0, y: 0, width: 64, height: 11))
+        let pen = Pen(g: g, width: 64, height: 11)
+        let width: Int
+        if let game {
+            pen.menuGame(game, frame: frame)
+            width = menuGameWidth(game)
+        } else {
+            pen.statusMascot(agents.first?.state, frame: frame)
+            width = 16
+        }
         guard let bytes = g.data else { return }
         let pixels = Data(bytes: bytes, count: g.bytesPerRow * g.height)
-        guard pixels != lastFrame, let image = g.makeImage() else { return }
+        guard pixels != lastFrame, let image = g.makeImage()?.cropping(to: CGRect(x: 0, y: 0, width: width * 4, height: 44)) else { return }
         lastFrame = pixels
-        item.button?.image = NSImage(cgImage: image, size: NSSize(width: 32, height: 22))
+        item.button?.image = NSImage(cgImage: image, size: NSSize(width: width * 2, height: 22))
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
@@ -75,5 +85,39 @@ extension Pen {
         default:
             break
         }
+    }
+}
+
+extension Pen {
+    func menuGame(_ game: MenuGame, frame f: Int) {
+        let xs = menuGameXs(game)
+        let gold = hex("#FFD166"), ball = hex("#F4F1EA")
+        if game.frozen {
+            for (i, state) in game.players.enumerated() {
+                let jump = state == .gate && f % 2 == 0
+                player(xs[i], lifted: jump, frame: state == .gate ? f : 0, index: i)
+                if state == .gate { px(gold, xs[i] + 11, jump ? 0 : 1, 2, 5); px(gold, xs[i] + 11, jump ? 6 : 7, 2, 2) }
+            }
+            return
+        }
+        guard let throwAt = pass(players: game.players.count, frame: f) else {
+            player(xs[0], lifted: false, frame: f, index: 0)
+            let up = [2, 1, 0, 0, 1][f % passFrames]
+            px(ball, xs[0] + 4, up, 2, 1)
+            return
+        }
+        for i in game.players.indices {
+            let lift = (i == throwAt.from && throwAt.step == 0) || (i == throwAt.to && throwAt.step == passFrames - 1) ? 1 : 0
+            player(xs[i], lifted: lift == 1, frame: f, index: i)
+        }
+        let t = Double(throwAt.step) / Double(passFrames - 1)
+        let x = Double(xs[throwAt.from]) + Double(xs[throwAt.to] - xs[throwAt.from]) * t + 4
+        let y = 2 - 8 * t * (1 - t)
+        pxf(ball, x, max(0, y), 2, 1)
+    }
+
+    private func player(_ x: Int, lifted: Bool, frame f: Int, index i: Int) {
+        mini(.done, x: x, ground: lifted ? 10 : 11, frame: f, index: i)
+        if lifted { g.clear(CGRect(x: x - 1, y: 10, width: 12, height: 1)) }
     }
 }

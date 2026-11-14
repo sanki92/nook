@@ -59,7 +59,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var screensChangedWhileDragging = false
     private var status: StatusMascot!
     private var watchTimer: Timer?
-    private var frameCount = 0
+    private var statusTimer: Timer?
+    private var alerts: Alerts?
+    private var statusFrame = 0
 
     func applicationDidFinishLaunching(_ note: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -95,6 +97,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         status = StatusMascot()
         status.onOpen = { pid in owningApp(of: pid)?.activate() }
+        if demoCount == nil {
+            alerts = Alerts()
+            alerts?.onOpen = { pid in owningApp(of: pid)?.activate() }
+        }
 
         fade(for: NSWorkspace.shared.frontmostApplication)
         refresh(animated: false)
@@ -103,10 +109,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         RunLoop.main.add(poll, forMode: .common)
         pollTimer = poll
 
-        let frames = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in self?.tick() }
-        frames.tolerance = 0.01
-        RunLoop.main.add(frames, forMode: .common)
-        frameTimer = frames
+        let menuBar = Timer(timeInterval: 0.2, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            self.statusFrame += 1
+            self.status.render(frame: self.statusFrame)
+        }
+        menuBar.tolerance = 0.04
+        RunLoop.main.add(menuBar, forMode: .common)
+        statusTimer = menuBar
+        NotificationCenter.default.addObserver(self, selector: #selector(occlusionChanged), name: NSWindow.didChangeOcclusionStateNotification, object: panel)
+        occlusionChanged()
 
         let watch = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in self?.watchRealWidgets() }
         watch.tolerance = 0.05
@@ -117,11 +129,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(appActivated), name: NSWorkspace.didActivateApplicationNotification, object: nil)
     }
 
-    private func tick() {
-        frameCount += 1
-        if frameCount % 2 == 0 { status.render(frame: frameCount / 2) }
-        guard panel.occlusionState.contains(.visible) else { return }
-        host.tick()
+    @objc private func occlusionChanged() {
+        let visible = panel.occlusionState.contains(.visible)
+        guard visible != (frameTimer != nil) else { return }
+        frameTimer?.invalidate()
+        frameTimer = nil
+        guard visible else { return }
+        let frames = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in self?.host.tick() }
+        frames.tolerance = 0.02
+        RunLoop.main.add(frames, forMode: .common)
+        frameTimer = frames
     }
 
     private func watchRealWidgets() {
@@ -149,6 +166,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async {
                 self.host.update(agents: agents, animated: animated)
                 self.status.update(agents: agents)
+                self.alerts?.update(agents: agents)
             }
         }
     }
