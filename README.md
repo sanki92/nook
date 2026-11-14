@@ -41,12 +41,13 @@ Every session gets its own little mascot, acting out whatever it's doing right n
 - Right-click for **Medium**, **Large** or **Extra Large**
 - Swipe the Medium one to flip between sessions
 - Helper agents tag along as tiny mascots
+- Pings you with a Mac notification when a session needs you
 - Click a tile to jump straight to its terminal
 - Fades with your other widgets while you work in an app
 
 <br clear="right">
 
-It hangs out in your menu bar too, showing whichever session matters most.
+It hangs out in your menu bar too: one mascot per working session, bouncing a ball between their heads. When one needs you, the game stops and it jumps up waving a "!".
 
 ## Private by design
 
