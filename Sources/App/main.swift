@@ -113,7 +113,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pollTimer = poll
 
         NotificationCenter.default.addObserver(self, selector: #selector(visibilityChanged), name: NSWindow.didChangeOcclusionStateNotification, object: panel)
-        NotificationCenter.default.addObserver(self, selector: #selector(visibilityChanged), name: NSApplication.didChangeOcclusionStateNotification, object: nil)
         let workspace = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.screensDidSleepNotification, NSWorkspace.sessionDidResignActiveNotification] {
             workspace.addObserver(self, selector: #selector(wentAway), name: name, object: nil)
@@ -141,7 +140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func visibilityChanged() {
         let widget = awake && panel.occlusionState.contains(.visible)
-        let menuBar = awake && !widget && NSApp.occlusionState.contains(.visible)
+        let menuBar = awake && !widget
         if widget != (frameTimer != nil) {
             frameTimer?.invalidate()
             frameTimer = widget ? repeating(0.1, tolerance: 0.02) { [weak self] in self?.tick() } : nil
