@@ -137,14 +137,28 @@ func summarizeTranscript(tail: Data, startsMidLine: Bool, includeSidechain: Bool
     return summary
 }
 
-func findAITitle(in url: URL) -> String? {
-    guard let data = try? Data(contentsOf: url, options: .alwaysMapped),
-          let marker = "\"ai-title\"".data(using: .utf8),
-          let hit = data.range(of: marker, options: .backwards) else { return nil }
-    let newline = Data([0x0A])
-    let start = data.range(of: newline, options: .backwards, in: data.startIndex..<hit.lowerBound)?.upperBound ?? data.startIndex
-    let end = data.range(of: newline, in: hit.upperBound..<data.endIndex)?.lowerBound ?? data.endIndex
-    let line = data.subdata(in: start..<end)
-    let entry = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any]
-    return entry?["aiTitle"] as? String
+func findAITitle(in url: URL, from start: UInt64 = 0, to end: UInt64? = nil) -> String? {
+    guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+    defer { try? handle.close() }
+    let marker = Data("\"ai-title\"".utf8), newline = Data([0x0A])
+    let chunk: UInt64 = 4_000_000, overlap: UInt64 = 65_536
+    let stop = end ?? ((try? handle.seekToEnd()) ?? 0)
+    var upper = stop
+    while upper > start {
+        let lower = upper > start + chunk ? upper - chunk : start
+        let from = lower > overlap ? lower - overlap : 0
+        guard (try? handle.seek(toOffset: from)) != nil,
+              let data = try? handle.read(upToCount: Int(min(upper + overlap, stop) - from)) else { return nil }
+        var searchEnd = data.endIndex
+        while let hit = data.range(of: marker, options: .backwards, in: data.startIndex..<searchEnd) {
+            searchEnd = hit.lowerBound
+            guard let open = data.range(of: newline, options: .backwards, in: data.startIndex..<hit.lowerBound)?.upperBound ?? (from == 0 ? data.startIndex : nil),
+                  let close = data.range(of: newline, in: hit.upperBound..<data.endIndex)?.lowerBound ?? (from + UInt64(data.count) == stop ? data.endIndex : nil),
+                  let entry = (try? JSONSerialization.jsonObject(with: data.subdata(in: open..<close))) as? [String: Any],
+                  let title = entry["aiTitle"] as? String else { continue }
+            return title
+        }
+        upper = lower
+    }
+    return nil
 }

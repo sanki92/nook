@@ -15,6 +15,7 @@ final class MediumCard: NSView {
     private let name = NSTextField(labelWithString: "")
     private let stateWord = NSTextField(labelWithString: "")
     private let context = pixelContext(width: 86, height: 50)
+    private let memo = FrameMemo()
     private var dots: [CALayer] = []
     private var picker = MediumPicker()
     private var agents: [Agent] = []
@@ -123,10 +124,12 @@ final class MediumCard: NSView {
         let f = frame + phase(for: shown.id)
         g.clear(CGRect(x: 0, y: 0, width: 86, height: 50))
         Pen(g: g).draw(shown.state, frame: f)
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        canvas.contents = g.makeImage()
-        CATransaction.commit()
+        if memo.changed(g) {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            canvas.contents = g.makeImage()
+            CATransaction.commit()
+        }
         crew.render(frame: f)
     }
 

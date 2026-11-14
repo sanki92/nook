@@ -5,7 +5,8 @@ final class StatusMascot: NSObject, NSMenuDelegate {
     private let context = pixelContext(width: 256, height: 44)
     private var agents: [Agent] = []
     private var game: MenuGame?
-    private var lastFrame = Data()
+    private let memo = FrameMemo()
+    private var lastWidth = 0
     var onOpen: ((Int32) -> Void)?
 
     override init() {
@@ -37,10 +38,9 @@ final class StatusMascot: NSObject, NSMenuDelegate {
             pen.statusMascot(agents.first?.state, frame: frame)
             width = 16
         }
-        guard let bytes = g.data else { return }
-        let pixels = Data(bytes: bytes, count: g.bytesPerRow * g.height)
-        guard pixels != lastFrame, let image = g.makeImage()?.cropping(to: CGRect(x: 0, y: 0, width: width * 4, height: 44)) else { return }
-        lastFrame = pixels
+        guard memo.changed(g) || width != lastWidth,
+              let image = g.makeImage()?.cropping(to: CGRect(x: 0, y: 0, width: width * 4, height: 44)) else { return }
+        lastWidth = width
         item.button?.image = NSImage(cgImage: image, size: NSSize(width: width * 2, height: 22))
     }
 

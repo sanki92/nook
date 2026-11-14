@@ -26,6 +26,24 @@ func pixelContext(width: Int, height: Int) -> CGContext? {
     return context
 }
 
+final class FrameMemo {
+    private var last: [UInt8] = []
+    private var owner: ObjectIdentifier?
+
+    func changed(_ g: CGContext) -> Bool {
+        guard let data = g.data else { return true }
+        let n = g.bytesPerRow * g.height
+        let id = ObjectIdentifier(g)
+        if owner == id, last.count == n, memcmp(last, data, n) == 0 { return false }
+        owner = id
+        if last.count != n { last = [UInt8](repeating: 0, count: n) }
+        last.withUnsafeMutableBytes { _ = memcpy($0.baseAddress!, data, n) }
+        return true
+    }
+
+    func reset() { owner = nil }
+}
+
 extension CAGradientLayer {
     func paint(_ state: AgentState) {
         let colors = tileColors[state]!
@@ -70,6 +88,7 @@ extension CALayer {
         width.calculationMode = .discrete
         width.duration = 1.6
         width.repeatCount = .infinity
+        width.preferredFrameRateRange = CAFrameRateRange(minimum: 4, maximum: 8, preferred: 4)
         width.isRemovedOnCompletion = false
         add(width, forKey: "pulse")
         let color = CAKeyframeAnimation(keyPath: "borderColor")
@@ -77,6 +96,7 @@ extension CALayer {
         color.calculationMode = .discrete
         color.duration = 1.6
         color.repeatCount = .infinity
+        color.preferredFrameRateRange = CAFrameRateRange(minimum: 4, maximum: 8, preferred: 4)
         color.isRemovedOnCompletion = false
         add(color, forKey: "pulse-color")
     }
@@ -87,6 +107,7 @@ final class CrewCanvas {
     private let art = CALayer()
     private let count = CATextLayer()
     private let context = pixelContext(width: 41, height: 14)
+    private let memo = FrameMemo()
     private var jobs: [AgentState] = []
     private(set) var width: CGFloat = 0
 
@@ -118,17 +139,19 @@ final class CrewCanvas {
         count.isHidden = fit.extra == 0
         count.string = "+\(fit.extra)"
         count.frame = CGRect(x: minisWidth + 2, y: 6, width: 24, height: 14)
+        if jobs.isEmpty {
+            art.contents = nil
+            memo.reset()
+        }
         CATransaction.commit()
         render(frame: 0)
     }
 
     func render(frame: Int) {
-        guard !jobs.isEmpty, let g = context else {
-            art.contents = nil
-            return
-        }
+        guard !jobs.isEmpty, let g = context else { return }
         g.clear(CGRect(x: 0, y: 0, width: 41, height: 14))
         Pen(g: g).crew(jobs, frame: frame)
+        guard memo.changed(g) else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         art.contents = g.makeImage()
@@ -145,6 +168,7 @@ final class TileView: NSView {
     private let moreBadge = NSTextField(labelWithString: "")
     private let crew = CrewCanvas()
     private var context: CGContext?
+    private let memo = FrameMemo()
     private var geometry = TileGeometry(pixel: 2, compact: false, canvasWidth: 1, canvasHeight: 1, offsetX: 0, offsetY: 0, nameFontSize: 14, nameBottom: 7)
     private var content = Content.noAgents
     var pid: Int32?
@@ -249,10 +273,12 @@ final class TileView: NSView {
             if geometry.compact { pen.drawIcon(state, frame: f) } else { pen.draw(state, frame: f) }
         }
         g.restoreGState()
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        canvas.contents = g.makeImage()
-        CATransaction.commit()
+        if memo.changed(g) {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            canvas.contents = g.makeImage()
+            CATransaction.commit()
+        }
         crew.render(frame: f)
     }
 }

@@ -258,6 +258,19 @@ check(pass(players: 3, frame: 10) == Pass(from: 2, to: 1, step: 0), "the ball tu
 check(pass(players: 3, frame: 15) == Pass(from: 1, to: 0, step: 0), "the ball comes back")
 check(pass(players: 1, frame: 3) == nil, "one player has no one to pass to")
 
+print("Titles")
+let titled = FileManager.default.temporaryDirectory.appendingPathComponent("nook-title-\(UUID().uuidString).jsonl")
+try! lines([#"{"type":"ai-title","aiTitle":"First"}"#, prompt, reply, ""]).write(to: titled)
+let firstSize = UInt64((try! FileManager.default.attributesOfItem(atPath: titled.path)[.size] as! NSNumber).intValue)
+check(findAITitle(in: titled) == "First", "the title is found")
+let more = FileHandle(forWritingAtPath: titled.path)!
+more.seekToEndOfFile()
+more.write(lines([prompt, #"{"type":"ai-title","aiTitle":"Second"}"#, ""]))
+more.closeFile()
+check(findAITitle(in: titled, from: firstSize, to: firstSize + 200) == "Second", "a newer title in the added bytes wins")
+check(findAITitle(in: titled, from: 0, to: firstSize) == "First", "an older range still finds the older title")
+try? FileManager.default.removeItem(at: titled)
+
 print("Alerts")
 var alerts = AlertTracker()
 check(alerts.entered([agent("a", .gate)]).isEmpty, "nothing alerts at launch")

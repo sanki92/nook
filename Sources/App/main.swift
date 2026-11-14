@@ -44,7 +44,7 @@ func owningApp(of pid: pid_t) -> NSRunningApplication? {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let defaults = UserDefaults.standard
     private let store = SessionStore()
-    private let poller = DispatchQueue(label: "agents.poll", qos: .utility)
+    private let poller = DispatchQueue(label: "agents.poll", qos: .utility, autoreleaseFrequency: .workItem)
     private let demoCount = argument(after: "--demo").flatMap(Int.init)
     private var panel: NSPanel!
     private var host: GlassHost!
@@ -58,10 +58,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var moving = false
     private var screensChangedWhileDragging = false
     private var status: StatusMascot!
-    private var watchTimer: Timer?
     private var statusTimer: Timer?
     private var alerts: Alerts?
     private var statusFrame = 0
+    private var frameCount = 0
+    private var awake = true
+    private var polling = false
 
     func applicationDidFinishLaunching(_ note: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -76,6 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.isReleasedWhenClosed = false
         panel.level = widgetLevel
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        panel.colorSpace = .sRGB
         outline = PlacementOutline(below: panel)
 
         host = GlassHost(size: size)
@@ -105,40 +108,71 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fade(for: NSWorkspace.shared.frontmostApplication)
         refresh(animated: false)
         let poll = Timer(timeInterval: 1, repeats: true) { [weak self] _ in self?.refresh(animated: true) }
-        poll.tolerance = 0.2
+        poll.tolerance = 0.5
         RunLoop.main.add(poll, forMode: .common)
         pollTimer = poll
 
-        let menuBar = Timer(timeInterval: 0.2, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            self.statusFrame += 1
-            self.status.render(frame: self.statusFrame)
+        NotificationCenter.default.addObserver(self, selector: #selector(visibilityChanged), name: NSWindow.didChangeOcclusionStateNotification, object: panel)
+        NotificationCenter.default.addObserver(self, selector: #selector(visibilityChanged), name: NSApplication.didChangeOcclusionStateNotification, object: nil)
+        let workspace = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.screensDidSleepNotification, NSWorkspace.sessionDidResignActiveNotification] {
+            workspace.addObserver(self, selector: #selector(wentAway), name: name, object: nil)
         }
-        menuBar.tolerance = 0.04
-        RunLoop.main.add(menuBar, forMode: .common)
-        statusTimer = menuBar
-        NotificationCenter.default.addObserver(self, selector: #selector(occlusionChanged), name: NSWindow.didChangeOcclusionStateNotification, object: panel)
-        occlusionChanged()
-
-        let watch = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in self?.watchRealWidgets() }
-        watch.tolerance = 0.05
-        RunLoop.main.add(watch, forMode: .common)
-        watchTimer = watch
+        for name in [NSWorkspace.screensDidWakeNotification, NSWorkspace.sessionDidBecomeActiveNotification] {
+            workspace.addObserver(self, selector: #selector(cameBack), name: name, object: nil)
+        }
+        DistributedNotificationCenter.default().addObserver(self, selector: #selector(wentAway), name: NSNotification.Name("com.apple.screenIsLocked"), object: nil)
+        DistributedNotificationCenter.default().addObserver(self, selector: #selector(cameBack), name: NSNotification.Name("com.apple.screenIsUnlocked"), object: nil)
+        visibilityChanged()
 
         NotificationCenter.default.addObserver(self, selector: #selector(screensChanged), name: NSApplication.didChangeScreenParametersNotification, object: nil)
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(appActivated), name: NSWorkspace.didActivateApplicationNotification, object: nil)
     }
 
-    @objc private func occlusionChanged() {
-        let visible = panel.occlusionState.contains(.visible)
-        guard visible != (frameTimer != nil) else { return }
-        frameTimer?.invalidate()
-        frameTimer = nil
-        guard visible else { return }
-        let frames = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in self?.host.tick() }
-        frames.tolerance = 0.02
-        RunLoop.main.add(frames, forMode: .common)
-        frameTimer = frames
+    @objc private func wentAway() {
+        awake = false
+        visibilityChanged()
+    }
+
+    @objc private func cameBack() {
+        awake = true
+        visibilityChanged()
+    }
+
+    @objc private func visibilityChanged() {
+        let widget = awake && panel.occlusionState.contains(.visible)
+        let menuBar = awake && !widget && NSApp.occlusionState.contains(.visible)
+        if widget != (frameTimer != nil) {
+            frameTimer?.invalidate()
+            frameTimer = widget ? repeating(0.1, tolerance: 0.02) { [weak self] in self?.tick() } : nil
+            if widget { watchRealWidgets() }
+        }
+        if menuBar != (statusTimer != nil) {
+            statusTimer?.invalidate()
+            statusTimer = menuBar ? repeating(0.2, tolerance: 0.04) { [weak self] in self?.renderStatus() } : nil
+        }
+    }
+
+    private func repeating(_ interval: TimeInterval, tolerance: TimeInterval, _ body: @escaping () -> Void) -> Timer {
+        let timer = Timer(timeInterval: interval, repeats: true) { _ in body() }
+        timer.tolerance = tolerance
+        RunLoop.main.add(timer, forMode: .common)
+        return timer
+    }
+
+    private func tick() {
+        frameCount += 1
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        host.tick()
+        CATransaction.commit()
+        if frameCount % 2 == 0 { renderStatus() }
+        if frameCount % 3 == 0 { watchRealWidgets() }
+    }
+
+    private func renderStatus() {
+        statusFrame += 1
+        status.render(frame: statusFrame)
     }
 
     private func watchRealWidgets() {
@@ -160,10 +194,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             status.update(agents: agents)
             return
         }
+        guard !polling else { return }
+        polling = true
         poller.async { [weak self] in
             guard let self else { return }
             let agents = self.store.snapshot()
             DispatchQueue.main.async {
+                self.polling = false
                 self.host.update(agents: agents, animated: animated)
                 self.status.update(agents: agents)
                 self.alerts?.update(agents: agents)

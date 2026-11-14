@@ -8,14 +8,19 @@ extension NSScreen {
     }
 }
 
+private var widgetHostPID: pid_t?
+
 func realWidgetFrames() -> [CGRect] {
+    if widgetHostPID.map(isProcessAlive) != true {
+        widgetHostPID = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.notificationcenterui").first?.processIdentifier
+    }
+    guard let host = widgetHostPID else { return [] }
     let height = NSScreen.screens.first?.frame.height ?? 0
-    let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
+    let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [NSDictionary] ?? []
     let layers = Int(CGWindowLevelForKey(.desktopIconWindow))..<Int(CGWindowLevelForKey(.normalWindow))
     return windows.compactMap { info in
-        guard let layer = info[kCGWindowLayer as String] as? Int, layers.contains(layer),
-              let pid = info[kCGWindowOwnerPID as String] as? pid_t,
-              NSRunningApplication(processIdentifier: pid)?.bundleIdentifier == "com.apple.notificationcenterui",
+        guard let pid = info[kCGWindowOwnerPID as String] as? pid_t, pid == host,
+              let layer = info[kCGWindowLayer as String] as? Int, layers.contains(layer),
               let bounds = info[kCGWindowBounds as String] as? NSDictionary,
               let rect = CGRect(dictionaryRepresentation: bounds),
               rect.width >= 100, rect.height >= 100 else { return nil }
