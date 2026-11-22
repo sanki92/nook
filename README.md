@@ -41,7 +41,7 @@ Every session gets its own little mascot, acting out whatever it's doing right n
 - Right-click for **Medium**, **Large** or **Extra Large**
 - Swipe the Medium one to flip between sessions
 - Helper agents tag along as tiny mascots
-- Pings you with a Mac notification when a session needs you
+- Pops up a banner when a session needs you or hits a snag
 - Click a tile to jump straight to its terminal
 - Fades with your other widgets while you work in an app
 

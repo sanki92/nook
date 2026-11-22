@@ -484,23 +484,8 @@ final class GlassHost: NSView {
             layer?.cornerCurve = .continuous
             layer?.masksToBounds = true
             addSubview(content)
-        } else if let glass = makeGlass(rect, content) {
-            addSubview(glass)
         } else {
-            let effect = NSVisualEffectView(frame: rect)
-            effect.material = .hudWindow
-            effect.blendingMode = .behindWindow
-            effect.state = .active
-            let mask = NSImage(size: NSSize(width: 53, height: 53), flipped: false) { bounds in
-                NSBezierPath(roundedRect: bounds, xRadius: 26, yRadius: 26).fill()
-                return true
-            }
-            mask.capInsets = NSEdgeInsets(top: 26, left: 26, bottom: 26, right: 26)
-            mask.resizingMode = .stretch
-            effect.maskImage = mask
-            effect.autoresizingMask = [.width, .height]
-            effect.addSubview(content)
-            addSubview(effect)
+            addSubview(glassBackground(rect, content, radius: 26))
         }
         interaction.frame = rect
         interaction.autoresizingMask = [.width, .height]
@@ -540,15 +525,28 @@ final class GlassHost: NSView {
     }
 }
 
-private func makeGlass(_ rect: NSRect, _ content: NSView) -> NSView? {
+func glassBackground(_ rect: NSRect, _ content: NSView, radius: CGFloat) -> NSView {
     #if compiler(>=6.2)
     if #available(macOS 26.0, *) {
         let glass = NSGlassEffectView(frame: rect)
-        glass.cornerRadius = 26
+        glass.cornerRadius = radius
         glass.autoresizingMask = [.width, .height]
         glass.contentView = content
         return glass
     }
     #endif
-    return nil
+    let effect = NSVisualEffectView(frame: rect)
+    effect.material = .hudWindow
+    effect.blendingMode = .behindWindow
+    effect.state = .active
+    let mask = NSImage(size: NSSize(width: radius * 2 + 1, height: radius * 2 + 1), flipped: false) { bounds in
+        NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).fill()
+        return true
+    }
+    mask.capInsets = NSEdgeInsets(top: radius, left: radius, bottom: radius, right: radius)
+    mask.resizingMode = .stretch
+    effect.maskImage = mask
+    effect.autoresizingMask = [.width, .height]
+    effect.addSubview(content)
+    return effect
 }
